@@ -115,12 +115,25 @@ first image has been pushed.
 Synology -- set them to match the user that owns your `DOWNLOADS_PATH`
 share (run `id <user>` over SSH on the NAS).
 
-## Dashboard
+## Adding users (temporary -- until the Phase 4 dashboard lands)
 
-Once running, the dashboard is available at `http://<nas-ip>:3000`
-(no authentication -- intended for LAN-only access). It's how you add and
-manage users, watch the queue, and trigger a manual sync; the old
-`add-user.sh` / `list-users.sh` console scripts from v2 are gone.
+There's no dashboard yet, so users are added via a small CLI, same idea as
+v2's `add-user.sh`:
+
+```bash
+docker exec -it book-sync node dist/cli/add-user.js "Alice" "104614681" "/downloads/Alice" "alice@example.com"
+docker exec -it book-sync node dist/cli/list-users.js
+```
+
+(Or via the Portainer console on the `book-sync` container.) This goes away
+once the dashboard can do the same thing from the browser.
+
+## Dashboard (Phase 4, not yet built)
+
+Once running, the dashboard will be available at `http://<nas-ip>:3000`
+(no authentication -- intended for LAN-only access) for managing users,
+watching the queue, and triggering a manual sync. Health check in the
+meantime: `http://<nas-ip>:3000/health`.
 
 ## Local development
 
@@ -129,6 +142,9 @@ npm install
 cp .env.example .env
 npm run db:generate   # after changing src/db/schema.ts
 npm run dev            # tsx watch, runs src/index.ts directly
+npm test                # unit tests (match/backoff logic)
+npm run user:add -- "Alice" "104614681" "/downloads/Alice" "alice@example.com"
+npm run user:list
 ```
 
 ## Data

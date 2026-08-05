@@ -10,7 +10,9 @@
     "dev": "tsx watch src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "user:add": "tsx src/cli/add-user.ts",
+    "user:list": "tsx src/cli/list-users.ts"
   },
   "dependencies": {
     "axios": "^1.7.7",
