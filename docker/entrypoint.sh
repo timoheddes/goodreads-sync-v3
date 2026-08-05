@@ -27,4 +27,4 @@ fi
 mkdir -p /app/data
 chown -R appuser:appuser /app/data
 
-exec su-exec appuser:appuser "$@"
+exec gosu appuser:appuser "$@"
