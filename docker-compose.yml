@@ -1,0 +1,37 @@
+services:
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ:-Europe/Amsterdam}
+    restart: unless-stopped
+    network_mode: host
+
+  book-sync:
+    # Pre-built multi-arch image from GitHub Actions -- never built locally.
+    # Portainer's "Re-pull image and redeploy" (part of GitOps updates)
+    # is what keeps this current; there is no `build:` here on purpose.
+    image: ghcr.io/timoheddes/goodreads-sync-v3:latest
+    container_name: book-sync
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=${TZ:-Europe/Amsterdam}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - PORT=3000
+      - DB_PATH=/app/data/books.db
+      - FLARE_URL=http://localhost:8191/v1
+      - AA_API_KEY=${AA_API_KEY}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+    volumes:
+      - book-sync-data:/app/data
+      - ${DOWNLOADS_PATH}:/downloads
+    depends_on:
+      - flaresolverr
+
+volumes:
+  book-sync-data:
