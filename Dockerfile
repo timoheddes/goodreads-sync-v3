@@ -26,9 +26,11 @@ FROM node:20-alpine AS runtime
 RUN apk add --no-cache su-exec shadow tzdata
 WORKDIR /app
 
-# Default app user -- entrypoint.sh remaps this to PUID/PGID at container start
-RUN addgroup -g 1000 appgroup \
-  && adduser -D -u 1000 -G appgroup appuser
+# Default app user -- entrypoint.sh remaps this to PUID/PGID at container start.
+# No fixed uid/gid here: node:20-alpine already ships a "node" user/group at
+# 1000/1000, so let addgroup/adduser pick whatever's free at build time.
+RUN addgroup appgroup \
+  && adduser -D -G appgroup appuser
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
