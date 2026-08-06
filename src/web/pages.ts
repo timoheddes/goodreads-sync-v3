@@ -51,19 +51,26 @@ export function renderHome(stats: DashboardStats, cycleRunning: boolean): string
 
 // ---- users ----
 
+function goodreadsProfileUrl(goodreadsId: string): string {
+  return `https://www.goodreads.com/user/show/${encodeURIComponent(goodreadsId)}`;
+}
+
 export function renderUsers(userList: User[]): string {
   const rows = userList
     .map(
       (u) => `
     <tr>
       <td>${escapeHtml(u.name)}</td>
-      <td class="muted">${escapeHtml(u.goodreadsId)}</td>
+      <td class="muted"><a href="${goodreadsProfileUrl(u.goodreadsId)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.goodreadsId)}</a></td>
       <td class="muted">${escapeHtml(u.downloadPath)}</td>
       <td class="muted">${u.email ? escapeHtml(u.email) : '—'}</td>
       <td>
-        <form class="inline" method="POST" action="/users/${u.id}/delete" hx-confirm="Remove ${escapeHtml(u.name)}? Their books stay in the library.">
-          <button class="danger" type="submit">Remove</button>
-        </form>
+        <div class="row-actions">
+          <a class="btn" href="/users/${u.id}/edit">Edit</a>
+          <form class="inline" method="POST" action="/users/${u.id}/delete" hx-confirm="Remove ${escapeHtml(u.name)}? Their books stay in the library.">
+            <button class="danger" type="submit">Remove</button>
+          </form>
+        </div>
       </td>
     </tr>`
     )
@@ -71,7 +78,7 @@ export function renderUsers(userList: User[]): string {
 
   const table =
     userList.length > 0
-      ? `<table>
+      ? `<table class="users-table">
       <thead><tr><th>Name</th><th>Goodreads ID</th><th>Download path</th><th>Email</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`
@@ -110,6 +117,37 @@ export function renderUsers(userList: User[]): string {
     Find your Goodreads ID in your profile URL: goodreads.com/user/show/<strong>104614681</strong>-yourname.
     Make sure your "to-read" shelf is public.
   </p>
+</div>`;
+}
+
+export function renderEditUser(user: User): string {
+  return `
+<h1>Edit user</h1>
+<div class="card">
+  <form method="POST" action="/users/${user.id}/edit">
+    <div class="form-grid">
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" name="name" required value="${escapeHtml(user.name)}" />
+      </div>
+      <div class="field">
+        <label for="goodreadsId">Goodreads ID</label>
+        <input id="goodreadsId" name="goodreadsId" required value="${escapeHtml(user.goodreadsId)}" />
+      </div>
+      <div class="field">
+        <label for="downloadPath">Download path</label>
+        <input id="downloadPath" name="downloadPath" required value="${escapeHtml(user.downloadPath)}" />
+      </div>
+      <div class="field">
+        <label for="email">Email (optional, for the daily digest)</label>
+        <input id="email" name="email" type="email" value="${user.email ? escapeHtml(user.email) : ''}" />
+      </div>
+      <div class="field">
+        <button class="primary" type="submit">Save changes</button>
+        <a class="btn" href="/users">Cancel</a>
+      </div>
+    </div>
+  </form>
 </div>`;
 }
 

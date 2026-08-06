@@ -3,6 +3,8 @@ import formbody from '@fastify/formbody';
 import {
   listUsers,
   createUser,
+  getUserById,
+  updateUser,
   deleteUser,
   getDashboardStats,
   listBooksPage,
@@ -18,7 +20,7 @@ import {
 } from '../db/repo.js';
 import { getAllSettings, setSetting } from '../settings.js';
 import { renderLayout, type FlashMessage } from '../web/layout.js';
-import { renderHome, renderUsers, renderBooks, renderSettings } from '../web/pages.js';
+import { renderHome, renderUsers, renderEditUser, renderBooks, renderSettings } from '../web/pages.js';
 import { runCycle, isCycleRunning } from '../cycle.js';
 import { scanAllUserFolders } from '../folderScan.js';
 import { sendDailyDigests } from '../digest.js';
@@ -51,6 +53,23 @@ function parseBookIds(value: string | string[] | undefined): number[] {
   if (!value) return [];
   const raw = Array.isArray(value) ? value : [value];
   return raw.map((v) => parseInt(v, 10)).filter((n) => !Number.isNaN(n));
+}
+
+interface UserFormValues {
+  name: string;
+  goodreadsId: string;
+  downloadPath: string;
+  email: string | null;
+}
+
+/** Shared by add-user and edit-user: trims fields, returns null if a required one is missing. */
+function parseUserForm(body: Record<string, string>): UserFormValues | null {
+  const name = (body.name || '').trim();
+  const goodreadsId = (body.goodreadsId || '').trim();
+  const downloadPath = (body.downloadPath || '').trim();
+  const email = (body.email || '').trim();
+  if (!name || !goodreadsId || !downloadPath) return null;
+  return { name, goodreadsId, downloadPath, email: email || null };
 }
 
 /**
@@ -99,20 +118,15 @@ export async function registerDashboardRoutes(app: FastifyInstance): Promise<voi
   });
 
   app.post('/users', async (req: FastifyRequest, reply: FastifyReply) => {
-    const b = req.body as Record<string, string>;
-    const name = (b.name || '').trim();
-    const goodreadsId = (b.goodreadsId || '').trim();
-    const downloadPath = (b.downloadPath || '').trim();
-    const email = (b.email || '').trim();
-
-    if (!name || !goodreadsId || !downloadPath) {
+    const values = parseUserForm(req.body as Record<string, string>);
+    if (!values) {
       redirect(reply, '/users', 'Name, Goodreads ID, and download path are required.', 'error');
       return;
     }
 
     try {
-      createUser({ name, goodreadsId, downloadPath, email: email || null });
-      redirect(reply, '/users', `Added ${name}.`);
+      createUser(values);
+      redirect(reply, '/users', `Added ${values.name}.`);
     } catch (err) {
       const isUniqueViolation = (err as { code?: string })?.code === 'SQLITE_CONSTRAINT_UNIQUE';
       logger.error({ err }, '[Dashboard] Failed to create user');
@@ -120,6 +134,46 @@ export async function registerDashboardRoutes(app: FastifyInstance): Promise<voi
         reply,
         '/users',
         isUniqueViolation ? 'A user with this Goodreads ID already exists.' : 'Could not add user.',
+        'error'
+      );
+    }
+  });
+
+  app.get('/users/:id/edit', async (req: FastifyRequest, reply: FastifyReply) => {
+    const id = parseInt((req.params as { id: string }).id, 10);
+    const user = Number.isNaN(id) ? undefined : getUserById(id);
+    if (!user) {
+      redirect(reply, '/users', 'User not found.', 'error');
+      return;
+    }
+    const flash = parseFlash(req.query as Record<string, unknown>);
+    const body = renderEditUser(user);
+    reply.type('text/html').send(renderLayout({ title: 'Edit user', active: 'users', body, flash }));
+  });
+
+  app.post('/users/:id/edit', async (req: FastifyRequest, reply: FastifyReply) => {
+    const id = parseInt((req.params as { id: string }).id, 10);
+    if (Number.isNaN(id) || !getUserById(id)) {
+      redirect(reply, '/users', 'User not found.', 'error');
+      return;
+    }
+
+    const values = parseUserForm(req.body as Record<string, string>);
+    if (!values) {
+      redirect(reply, `/users/${id}/edit`, 'Name, Goodreads ID, and download path are required.', 'error');
+      return;
+    }
+
+    try {
+      updateUser(id, values);
+      redirect(reply, '/users', `Updated ${values.name}.`);
+    } catch (err) {
+      const isUniqueViolation = (err as { code?: string })?.code === 'SQLITE_CONSTRAINT_UNIQUE';
+      logger.error({ err }, '[Dashboard] Failed to update user');
+      redirect(
+        reply,
+        `/users/${id}/edit`,
+        isUniqueViolation ? 'A user with this Goodreads ID already exists.' : 'Could not save changes.',
         'error'
       );
     }

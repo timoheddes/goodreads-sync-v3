@@ -105,6 +105,7 @@ small.muted { display: block; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; width: 100%; }
 input[type="checkbox"] { width: auto; padding: 0; }
 .books-table th:first-child, .books-table td:first-child { width: 32px; }
+.users-table td { vertical-align: middle; }
 label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--muted); }
 .field { margin-bottom: 14px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end; }

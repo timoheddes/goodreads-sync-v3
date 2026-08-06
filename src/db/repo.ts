@@ -18,6 +18,18 @@ export function createUser(data: {
   return db.insert(users).values(data).returning().get();
 }
 
+export function getUserById(id: number) {
+  return db.select().from(users).where(eq(users.id, id)).get();
+}
+
+/** Updates a user's details from the dashboard's edit-user form. */
+export function updateUser(
+  id: number,
+  data: { name: string; goodreadsId: string; downloadPath: string; email: string | null }
+): void {
+  db.update(users).set(data).where(eq(users.id, id)).run();
+}
+
 /**
  * Removes a user and their shelf-tracking state. Deliberately does NOT
  * touch the books table -- a book can be shared by multiple users (or
