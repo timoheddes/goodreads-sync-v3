@@ -302,6 +302,17 @@ export function markDigestSent(userId: number, now: Date = new Date()): void {
   db.update(users).set({ lastDigestSentAt: now }).where(eq(users.id, userId)).run();
 }
 
+/** Total books currently in this user's library (any source), for the "you now have N books" line. */
+export function countDownloadedBooksForUser(userId: number): number {
+  const row = db
+    .select({ cnt: sql<number>`count(*)` })
+    .from(books)
+    .innerJoin(userBooks, eq(userBooks.bookId, books.id))
+    .where(and(eq(userBooks.userId, userId), eq(books.status, 'downloaded')))
+    .get();
+  return row?.cnt ?? 0;
+}
+
 export function countPending(): number {
   const row = db
     .select({ cnt: sql<number>`count(*)` })

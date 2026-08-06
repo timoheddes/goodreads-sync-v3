@@ -179,6 +179,10 @@ If a user has neither -- nothing new found, nothing outstanding -- no email
 is sent that day. Sending uses direct Gmail SMTP (`SMTP_USER`/`SMTP_PASS`),
 not a local relay container like v2 used.
 
+Emails go out as HTML (with a plain-text fallback for clients that want
+it) -- counts bolded, book lists formatted, signed off from you. See
+`src/email.ts` if you want to tweak the copy or styling.
+
 To trigger a send immediately instead of waiting for the schedule:
 
 ```bash

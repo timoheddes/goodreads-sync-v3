@@ -9,8 +9,9 @@ import type { DigestBookRef, DigestContent } from './email.js';
  */
 export function buildDigestContent(
   found: DigestBookRef[],
-  stillSearching: DigestBookRef[]
+  stillSearching: DigestBookRef[],
+  totalBooks: number
 ): DigestContent | null {
   if (found.length === 0 && stillSearching.length === 0) return null;
-  return { found, stillSearching };
+  return { found, stillSearching, totalBooks };
 }

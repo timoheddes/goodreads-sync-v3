@@ -3,18 +3,19 @@ import assert from 'node:assert/strict';
 import { buildDigestContent } from './digestContent.js';
 
 test('returns null when there is nothing to report', () => {
-  assert.equal(buildDigestContent([], []), null);
+  assert.equal(buildDigestContent([], [], 5), null);
 });
 
 test('returns content when there are newly found books', () => {
-  const content = buildDigestContent([{ title: 'Dune', author: 'Frank Herbert' }], []);
+  const content = buildDigestContent([{ title: 'Dune', author: 'Frank Herbert' }], [], 12);
   assert.ok(content);
   assert.equal(content!.found.length, 1);
   assert.equal(content!.stillSearching.length, 0);
+  assert.equal(content!.totalBooks, 12);
 });
 
 test('returns content when there are still-searching books, even with nothing found', () => {
-  const content = buildDigestContent([], [{ title: 'Obscure Book', author: null }]);
+  const content = buildDigestContent([], [{ title: 'Obscure Book', author: null }], 3);
   assert.ok(content);
   assert.equal(content!.found.length, 0);
   assert.equal(content!.stillSearching.length, 1);
@@ -23,7 +24,8 @@ test('returns content when there are still-searching books, even with nothing fo
 test('includes both lists when both are non-empty', () => {
   const content = buildDigestContent(
     [{ title: 'Found Book', author: 'A' }],
-    [{ title: 'Missing Book', author: 'B' }]
+    [{ title: 'Missing Book', author: 'B' }],
+    7
   );
   assert.ok(content);
   assert.equal(content!.found[0].title, 'Found Book');

@@ -3,6 +3,7 @@ import { logger } from './logger.js';
 import { sendDigestEmail } from './email.js';
 import { buildDigestContent } from './digestContent.js';
 import {
+  countDownloadedBooksForUser,
   getStillSearchingBooksForUser,
   getUnnotifiedDownloadedBooksForUser,
   listUsers,
@@ -44,7 +45,8 @@ export async function sendDailyDigests(): Promise<void> {
 
       const found = getUnnotifiedDownloadedBooksForUser(user.id);
       const stillSearching = getStillSearchingBooksForUser(user.id);
-      const content = buildDigestContent(found, stillSearching);
+      const totalBooks = countDownloadedBooksForUser(user.id);
+      const content = buildDigestContent(found, stillSearching, totalBooks);
 
       if (!content) {
         skipped++;
