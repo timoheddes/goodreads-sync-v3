@@ -13,13 +13,11 @@ async function main() {
 
   runMigrations();
 
-  const app = buildServer();
+  const app = await buildServer();
   await app.listen({ host: '0.0.0.0', port: config.port });
   logger.info(`Dashboard listening on http://0.0.0.0:${config.port}`);
 
   startScheduler();
-
-  // Phase 2+: folder scan, daily digest, and dashboard routes get added here.
 }
 
 main().catch((err) => {

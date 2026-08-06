@@ -121,18 +121,16 @@ schedule but logs a warning and skips sending -- no error, no crash.
 Synology -- set them to match the user that owns your `DOWNLOADS_PATH`
 share (run `id <user>` over SSH on the NAS).
 
-## Adding users (temporary -- until the Phase 4 dashboard lands)
+## Adding users
 
-There's no dashboard yet, so users are added via a small CLI, same idea as
-v2's `add-user.sh`:
+Add users from the dashboard's **Users** page (name, Goodreads ID,
+download path, optional email for the digest). The old CLI still works too,
+if you'd rather script it or use the Portainer console:
 
 ```bash
 docker exec -it book-sync node dist/cli/add-user.js "Alice" "104614681" "/downloads/Alice" "alice@example.com"
 docker exec -it book-sync node dist/cli/list-users.js
 ```
-
-(Or via the Portainer console on the `book-sync` container.) This goes away
-once the dashboard can do the same thing from the browser.
 
 ## Folder scan (Phase 2)
 
@@ -189,13 +187,34 @@ To trigger a send immediately instead of waiting for the schedule:
 docker exec -it book-sync node dist/cli/send-digest.js
 ```
 
-## Dashboard (Phase 4, not yet built)
+## Dashboard (Phase 4)
 
-Once running, the dashboard will be available at
-`http://<nas-ip>:47291` (or whatever you set `DASHBOARD_PORT` to; no
-authentication -- intended for LAN-only access) for managing users,
-watching the queue, and triggering a manual sync. Health check in the
-meantime: `http://<nas-ip>:47291/health`.
+The dashboard is available at `http://<nas-ip>:47291` (or whatever you set
+`DASHBOARD_PORT` to). No authentication -- it's intended for LAN-only
+access, same as the rest of this app. Health check: `http://<nas-ip>:47291/health`.
+
+It's server-rendered HTML (no build step, no SPA) with
+[htmx](https://htmx.org) layered on top purely for progressive enhancement
+-- every page is a plain form/link underneath, so it all still works if
+htmx's CDN script can't load (e.g. no internet on the LAN that day).
+
+- **Overview**: queue stats (users, downloaded/pending/still-searching
+  counts, how many are eligible right now, downloads today) plus buttons to
+  trigger a sync, folder scan, or digest send immediately instead of
+  waiting for their cron schedules.
+- **Users**: add/remove users. Removing a user only unlinks them -- their
+  books stay in the library in case anyone else has them.
+- **Books**: filterable by status (all/pending/downloaded/still searching),
+  paginated 25 at a time, showing which user(s) each book belongs to, its
+  attempt count, and the last error if it's still searching. Per-book
+  **Retry** (resets it to `pending` so the next cycle picks it up again)
+  and **Remove** (deletes it entirely) actions, plus a bulk **re-queue all
+  downloaded** button on the Downloaded tab.
+- **Settings**: edit the rate limits (`maxDownloadsPerDay`,
+  `maxDownloadsPerUserPerDay`, `queueCooldownMs`) that used to be hardcoded
+  constants -- takes effect immediately, no redeploy. Cron schedules
+  (`SYNC_CRON`, `FOLDER_SCAN_CRON`, `DIGEST_CRON`) stay env vars since
+  changing those needs a container restart anyway.
 
 ## Local development
 

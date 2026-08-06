@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm';
 import { db } from './index.js';
 import { books, shelfState, userBooks, users } from './schema.js';
 
@@ -6,6 +6,28 @@ import { books, shelfState, userBooks, users } from './schema.js';
 
 export function listUsers() {
   return db.select().from(users).all();
+}
+
+/** Create a user from the dashboard's add-user form -- same shape as the add-user CLI. */
+export function createUser(data: {
+  name: string;
+  goodreadsId: string;
+  downloadPath: string;
+  email: string | null;
+}) {
+  return db.insert(users).values(data).returning().get();
+}
+
+/**
+ * Removes a user and their shelf-tracking state. Deliberately does NOT
+ * touch the books table -- a book can be shared by multiple users (or
+ * useful to keep around for the dashboard's book list) even after one
+ * user is removed, so only the join table and per-user state go away.
+ */
+export function deleteUser(id: number): void {
+  db.delete(userBooks).where(eq(userBooks.userId, id)).run();
+  db.delete(shelfState).where(eq(shelfState.userId, id)).run();
+  db.delete(users).where(eq(users.id, id)).run();
 }
 
 // ---- shelf_state (feed-hash short-circuit for RSS sync) ----
@@ -325,4 +347,89 @@ export function countPending(): number {
     )
     .get();
   return row?.cnt ?? 0;
+}
+
+// ---- dashboard (Phase 4) ----
+
+export type BookStatusFilter = 'all' | 'pending' | 'downloaded' | 'not_found';
+
+function bookStatusWhere(status: BookStatusFilter) {
+  return status === 'all' ? sql`1=1` : eq(books.status, status);
+}
+
+/** Paginated book list for the dashboard, newest activity first. */
+export function listBooksPage(status: BookStatusFilter, limit: number, offset: number) {
+  return db
+    .select()
+    .from(books)
+    .where(bookStatusWhere(status))
+    .orderBy(desc(books.updatedAt))
+    .limit(limit)
+    .offset(offset)
+    .all();
+}
+
+export function countBooksByStatus(status: BookStatusFilter): number {
+  const row = db
+    .select({ cnt: sql<number>`count(*)` })
+    .from(books)
+    .where(bookStatusWhere(status))
+    .get();
+  return row?.cnt ?? 0;
+}
+
+export function getBookById(id: number) {
+  return db.select().from(books).where(eq(books.id, id)).get();
+}
+
+/** Removes a book entirely -- unlinks it from every user first, then deletes the row. */
+export function deleteBook(id: number): void {
+  db.delete(userBooks).where(eq(userBooks.bookId, id)).run();
+  db.delete(books).where(eq(books.id, id)).run();
+}
+
+/**
+ * Resets a book back to `pending` (clearing file/download/backoff state) so
+ * the queue picks it up again on the next cycle. Same effect as the
+ * requeue-book CLI, exposed here for the dashboard's per-book retry button.
+ */
+export function requeueBook(id: number): void {
+  db.update(books)
+    .set({
+      status: 'pending',
+      filePath: null,
+      downloadedAt: null,
+      nextRetryAt: null,
+      lastError: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(books.id, id))
+    .run();
+}
+
+export function requeueAllDownloaded(): number {
+  const rows = db.select({ id: books.id }).from(books).where(eq(books.status, 'downloaded')).all();
+  for (const row of rows) requeueBook(row.id);
+  return rows.length;
+}
+
+export interface DashboardStats {
+  totalUsers: number;
+  downloaded: number;
+  pending: number;
+  notFound: number;
+  eligibleNow: number;
+  downloadsToday: number;
+}
+
+export function getDashboardStats(): DashboardStats {
+  const totalUsersRow = db.select({ cnt: sql<number>`count(*)` }).from(users).get();
+  return {
+    totalUsers: totalUsersRow?.cnt ?? 0,
+    downloaded: countBooksByStatus('downloaded'),
+    pending: countBooksByStatus('pending'),
+    notFound: countBooksByStatus('not_found'),
+    eligibleNow: countPending(),
+    downloadsToday: countDownloadsToday(),
+  };
 }

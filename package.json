@@ -18,6 +18,7 @@
     "digest:send": "tsx src/cli/send-digest.ts"
   },
   "dependencies": {
+    "@fastify/formbody": "^7.4.0",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.7",
     "better-sqlite3": "^11.3.0",

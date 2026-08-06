@@ -15,8 +15,12 @@ const DEFAULTS = {
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
+// All current settings are numeric (rate limits, a cooldown in ms). Widened
+// to `number` here rather than the literal default values, since these are
+// meant to be edited at runtime from the dashboard, not fixed constants.
+export type SettingsValues = { [K in SettingKey]: number };
 
-export function getSetting<K extends SettingKey>(key: K): (typeof DEFAULTS)[K] {
+export function getSetting<K extends SettingKey>(key: K): number {
   const row = db.select().from(settings).where(eq(settings.key, key)).get();
   if (!row) return DEFAULTS[key];
   try {
@@ -26,7 +30,7 @@ export function getSetting<K extends SettingKey>(key: K): (typeof DEFAULTS)[K] {
   }
 }
 
-export function setSetting<K extends SettingKey>(key: K, value: (typeof DEFAULTS)[K]): void {
+export function setSetting<K extends SettingKey>(key: K, value: number): void {
   const encoded = JSON.stringify(value);
   db.insert(settings)
     .values({ key, value: encoded })
@@ -34,7 +38,7 @@ export function setSetting<K extends SettingKey>(key: K, value: (typeof DEFAULTS
     .run();
 }
 
-export function getAllSettings(): typeof DEFAULTS {
+export function getAllSettings(): SettingsValues {
   return {
     maxDownloadsPerDay: getSetting('maxDownloadsPerDay'),
     maxDownloadsPerUserPerDay: getSetting('maxDownloadsPerUserPerDay'),
