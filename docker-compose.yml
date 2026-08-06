@@ -20,7 +20,7 @@ services:
       - TZ=${TZ:-Europe/Amsterdam}
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
-      - PORT=3000
+      - PORT=${DASHBOARD_PORT:-47291}
       - DB_PATH=/app/data/books.db
       - FLARE_URL=http://localhost:8191/v1
       - AA_API_KEY=${AA_API_KEY}

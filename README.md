@@ -105,6 +105,7 @@ first image has been pushed.
 | `DOWNLOADS_PATH`  | _(required)_           | Host path to mount as `/downloads` (parent of each user's folder) |
 | `PUID` / `PGID`   | `1000` / `1000`        | UID/GID the app should run as, matching the owner of your books share |
 | `TZ`              | `Europe/Amsterdam`     | Timezone for logs, cron schedules, and the daily digest send time |
+| `DASHBOARD_PORT`  | `47291`                | Host port for the dashboard/health check (runs with `network_mode: host`, so this is a real host port -- pick something else if it's taken too) |
 | `FLARE_URL`       | `http://localhost:8191/v1` | FlareSolverr endpoint                                        |
 | `DB_PATH`         | `/app/data/books.db`   | SQLite database path inside the container                       |
 | `SMTP_USER`       | _(optional)_           | Gmail address used to send the daily digest                     |
@@ -130,10 +131,11 @@ once the dashboard can do the same thing from the browser.
 
 ## Dashboard (Phase 4, not yet built)
 
-Once running, the dashboard will be available at `http://<nas-ip>:3000`
-(no authentication -- intended for LAN-only access) for managing users,
+Once running, the dashboard will be available at
+`http://<nas-ip>:47291` (or whatever you set `DASHBOARD_PORT` to; no
+authentication -- intended for LAN-only access) for managing users,
 watching the queue, and triggering a manual sync. Health check in the
-meantime: `http://<nas-ip>:3000/health`.
+meantime: `http://<nas-ip>:47291/health`.
 
 ## Local development
 
