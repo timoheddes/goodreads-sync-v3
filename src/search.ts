@@ -28,17 +28,22 @@ async function flareSolverrGet(url: string): Promise<FlareSolverrResponse | null
   return response.data;
 }
 
+export interface AnnaMatch {
+  domain: string;
+  md5: string;
+}
+
 /**
  * Searches Anna's Archive for a book by query string, fuzzy-matching the top
- * results against the expected title/author. Returns a download URL (the
- * fast_download API link if an API key is configured, otherwise the book's
- * detail page), or null if nothing matched.
+ * results against the expected title/author. Returns the matching record's
+ * domain + md5 (enough to resolve an actual download URL via the fast
+ * download JSON API in download.ts), or null if nothing matched.
  */
 export async function findBookOnAnna(
   query: string,
   expectedTitle: string | null,
   expectedAuthor: string | null
-): Promise<string | null> {
+): Promise<AnnaMatch | null> {
   const searchParams = 'search?index=&page=1&sort=&ext=epub&lang=en&lang=fr&lang=nl&display=&q=';
 
   for (const domain of config.annasArchiveDomains) {
@@ -90,11 +95,8 @@ export async function findBookOnAnna(
       );
 
       if (match.isMatch) {
-        logger.info({ resultTitle, resultAuthor, domain }, '[Search] Match found');
-        if (config.annasArchiveApiKey) {
-          return `https://${domain}/fast_download/${md5}/0/0?key=${config.annasArchiveApiKey}`;
-        }
-        return `https://${domain}/md5/${md5}`;
+        logger.info({ resultTitle, resultAuthor, domain, md5 }, '[Search] Match found');
+        return { domain, md5 };
       }
     }
 

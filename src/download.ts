@@ -2,10 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import axios, { type AxiosResponse } from 'axios';
-import * as cheerio from 'cheerio';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { sanitizeFilename } from './utils.js';
+import type { AnnaMatch } from './search.js';
+
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'application/epub+zip': '.epub',
@@ -47,67 +50,70 @@ function getFileExtension(response: AxiosResponse): string {
   return '.epub';
 }
 
+interface FastDownloadResponse {
+  download_url?: string;
+  error?: string;
+}
+
 /**
- * Resolves a fast_download URL to the real file URL via FlareSolverr (the
- * intermediate page is itself behind Cloudflare), then streams the file to
- * a temp path. Returns the temp file path and detected extension.
+ * Resolves a matched book to an actual downloadable file URL using Anna's
+ * Archive's documented member JSON API (/dyn/api/fast_download.json) --
+ * NOT the /fast_download/{md5}/... HTML page, which is meant for browsers
+ * and requires scraping a "Download now" link out of a page that also
+ * contains plenty of other links (nav, account menu, etc.) matching naive
+ * substring heuristics. This plain JSON call doesn't need FlareSolverr.
+ */
+async function resolveDownloadUrl(match: AnnaMatch): Promise<string> {
+  if (!config.annasArchiveApiKey) {
+    throw new Error('AA_API_KEY is not configured -- cannot resolve a download URL');
+  }
+
+  const apiUrl = `https://${match.domain}/dyn/api/fast_download.json?md5=${match.md5}&key=${config.annasArchiveApiKey}`;
+  const response = await axios.get<FastDownloadResponse>(apiUrl, {
+    timeout: 30000,
+    headers: { 'User-Agent': BROWSER_USER_AGENT },
+    validateStatus: () => true,
+  });
+
+  if (response.status !== 200) {
+    throw new Error(`fast_download.json returned HTTP ${response.status}`);
+  }
+  if (!response.data?.download_url) {
+    throw new Error(`fast_download.json error: ${response.data?.error || 'no download_url in response'}`);
+  }
+
+  logger.info({ downloadUrl: response.data.download_url }, '[Download] Resolved via fast_download.json API');
+  return response.data.download_url;
+}
+
+/**
+ * Streams a matched book to a temp path. Returns the temp file path and
+ * detected extension. Refuses to save anything that comes back as HTML --
+ * that's what an error/interstitial page looks like, never a real ebook,
+ * and saving it anyway (mislabeled with a guessed extension) is exactly
+ * what caused corrupted "downloads" before this function existed.
  */
 export async function downloadBook(
-  url: string,
+  match: AnnaMatch,
   bookInfo: { title: string | null; author: string | null }
 ): Promise<{ filePath: string; extension: string }> {
   const tempDir = path.join(path.dirname(config.dbPath), 'tmp');
   fs.mkdirSync(tempDir, { recursive: true });
 
-  let finalUrl = url;
-
-  if (url.includes('/fast_download/')) {
-    logger.info('[Download] Resolving fast_download page via FlareSolverr...');
-    const flareResponse = await axios.post(
-      config.flareSolverrUrl,
-      { cmd: 'request.get', url, maxTimeout: 120000 },
-      { timeout: 150000, validateStatus: () => true }
-    );
-
-    if (flareResponse.status !== 200 || flareResponse.data?.status !== 'ok') {
-      const msg = flareResponse.data?.message || flareResponse.data?.status || `HTTP ${flareResponse.status}`;
-      throw new Error(`FlareSolverr failed to resolve fast_download page: ${msg}`);
-    }
-
-    const html = flareResponse.data.solution.response;
-    const $ = cheerio.load(html);
-
-    let downloadLink: string | null = null;
-    $('a[href]').each((_, el) => {
-      const href = $(el).attr('href');
-      if (
-        href &&
-        (href.includes('/dl/') || href.includes('cloudflare-ipfs') || href.includes('.epub') || href.includes('.pdf') || href.includes('download'))
-      ) {
-        if (!downloadLink) downloadLink = href;
-      }
-    });
-
-    if (!downloadLink) {
-      const bodyText = $('body').text().replace(/\s+/g, ' ').trim().substring(0, 500);
-      logger.warn({ bodyText }, '[Download] Could not find download link in fast_download page');
-      throw new Error('Could not extract download link from fast_download page');
-    }
-
-    if ((downloadLink as string).startsWith('/')) {
-      const urlObj = new URL(url);
-      downloadLink = `${urlObj.protocol}//${urlObj.host}${downloadLink}`;
-    }
-    finalUrl = downloadLink;
-    logger.info({ finalUrl }, '[Download] Resolved download link');
-  }
+  const finalUrl = await resolveDownloadUrl(match);
 
   logger.info('[Download] Starting stream download...');
   const response = await axios.get(finalUrl, {
     responseType: 'stream',
     timeout: 300000,
     maxRedirects: 10,
+    headers: { 'User-Agent': BROWSER_USER_AGENT },
   });
+
+  const contentType = (response.headers['content-type'] as string | undefined) ?? '';
+  if (contentType.includes('text/html')) {
+    throw new Error(`Download URL returned HTML instead of a file (content-type: ${contentType}) -- refusing to save`);
+  }
 
   const extension = getFileExtension(response);
   const safeTitle = sanitizeFilename(`${bookInfo.author || 'Unknown'} - ${bookInfo.title || 'Unknown'}`);
