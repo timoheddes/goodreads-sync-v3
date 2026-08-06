@@ -56,6 +56,16 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data
 ENV NODE_ENV=production
 EXPOSE 3000
 
+# Hits the app's own /health route (added in Phase 0). Uses `node -e`
+# instead of curl/wget so the runtime image doesn't need an extra apt
+# package just for this. Reads PORT the same way the app does (defaults to
+# 3000, but docker-compose.yml sets it to DASHBOARD_PORT) -- with
+# network_mode: host, localhost:$PORT from inside the container reaches
+# the app directly, same as how scheduler.ts already reaches FlareSolverr
+# via localhost.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||3000)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
 # Runs as root initially so entrypoint.sh can fix ownership, then drops to appuser via gosu
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "dist/index.js"]
