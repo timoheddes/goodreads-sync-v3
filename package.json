@@ -10,11 +10,12 @@
     "dev": "tsx watch src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "DB_PATH=/tmp/goodreads-sync-test.db node --import tsx --test src/**/*.test.ts",
     "user:add": "tsx src/cli/add-user.ts",
     "user:list": "tsx src/cli/list-users.ts",
     "books:requeue": "tsx src/cli/requeue-book.ts",
-    "folders:scan": "tsx src/cli/scan-folders.ts"
+    "folders:scan": "tsx src/cli/scan-folders.ts",
+    "digest:send": "tsx src/cli/send-digest.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
@@ -25,6 +26,7 @@
     "fast-xml-parser": "^4.5.0",
     "fastify": "^4.28.1",
     "node-cron": "^3.0.3",
+    "nodemailer": "^6.10.1",
     "pino": "^9.4.0",
     "pino-pretty": "^11.2.2",
     "rss-parser": "^3.13.0"
@@ -34,6 +36,7 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.5.5",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^6.4.24",
     "drizzle-kit": "^0.24.2",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2"

@@ -26,6 +26,11 @@ export const config = {
   // cycle, so it doesn't need to run anywhere near as often.
   folderScanCronSchedule: process.env.FOLDER_SCAN_CRON || '0 3 * * *',
 
+  // Cron expression for the daily digest email (Phase 3) -- once a day by
+  // default, independent of the sync cycle and folder scan. Only actually
+  // sends if a given user has something new to report, see src/digest.ts.
+  digestCronSchedule: process.env.DIGEST_CRON || '0 8 * * *',
+
   smtpUser: process.env.SMTP_USER || '',
   smtpPass: process.env.SMTP_PASS || '',
   smtpFrom: process.env.SMTP_FROM || process.env.SMTP_USER || '',

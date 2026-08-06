@@ -27,6 +27,7 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
       - SMTP_FROM=${SMTP_FROM}
+      - DIGEST_CRON=${DIGEST_CRON:-0 8 * * *}
     volumes:
       - book-sync-data:/app/data
       - ${DOWNLOADS_PATH}:/downloads

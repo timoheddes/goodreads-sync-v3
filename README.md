@@ -107,11 +107,15 @@ first image has been pushed.
 | `TZ`              | `Europe/Amsterdam`     | Timezone for logs, cron schedules, and the daily digest send time |
 | `DASHBOARD_PORT`  | `47291`                | Host port for the dashboard/health check (runs with `network_mode: host`, so this is a real host port -- pick something else if it's taken too) |
 | `FOLDER_SCAN_CRON`| `0 3 * * *`            | Cron schedule for the daily folder scan (Phase 2)                |
+| `DIGEST_CRON`     | `0 8 * * *`            | Cron schedule for the daily digest email (Phase 3)               |
 | `FLARE_URL`       | `http://localhost:8191/v1` | FlareSolverr endpoint                                        |
 | `DB_PATH`         | `/app/data/books.db`   | SQLite database path inside the container                       |
 | `SMTP_USER`       | _(optional)_           | Gmail address used to send the daily digest                     |
-| `SMTP_PASS`       | _(optional)_           | Gmail app password                                               |
+| `SMTP_PASS`       | _(optional)_           | Gmail app password (not your regular Gmail password)            |
 | `SMTP_FROM`       | `${SMTP_USER}`         | Sender address for digest emails                                |
+
+If `SMTP_USER`/`SMTP_PASS` are left blank, the digest cron still runs on
+schedule but logs a warning and skips sending -- no error, no crash.
 
 `PUID`/`PGID` are what fix the folder-ownership problems v2 had on
 Synology -- set them to match the user that owns your `DOWNLOADS_PATH`
@@ -156,6 +160,31 @@ docker kill --signal=SIGUSR2 book-sync
 docker exec -it book-sync node dist/cli/scan-folders.js
 ```
 
+## Daily digest (Phase 3)
+
+Once a day (`DIGEST_CRON`, default 8am), each user with an email on file
+gets a summary -- but only if there's actually something to report:
+
+- **Found**: books downloaded since their last digest (source doesn't
+  matter -- an Anna's Archive download and a folder-scan match both count).
+  Each book is only ever reported once.
+- **Still searching, will keep retrying**: every book currently at
+  `not_found` status for that user. Unlike the found list, this one repeats
+  every day for as long as a book stays unresolved -- it's meant to read as
+  an ongoing status, not a one-off notice. Lists longer than 25 titles are
+  truncated with a "...and N more" summary; the count in the heading is
+  always the true total.
+
+If a user has neither -- nothing new found, nothing outstanding -- no email
+is sent that day. Sending uses direct Gmail SMTP (`SMTP_USER`/`SMTP_PASS`),
+not a local relay container like v2 used.
+
+To trigger a send immediately instead of waiting for the schedule:
+
+```bash
+docker exec -it book-sync node dist/cli/send-digest.js
+```
+
 ## Dashboard (Phase 4, not yet built)
 
 Once running, the dashboard will be available at
@@ -171,10 +200,11 @@ npm install
 cp .env.example .env
 npm run db:generate   # after changing src/db/schema.ts
 npm run dev            # tsx watch, runs src/index.ts directly
-npm test                # unit tests (match/backoff/epub-metadata logic)
+npm test                # unit tests (match/backoff/epub-metadata/digest logic)
 npm run user:add -- "Alice" "104614681" "/downloads/Alice" "alice@example.com"
 npm run user:list
 npm run folders:scan    # run a folder scan immediately
+npm run digest:send     # send the daily digest immediately
 npm run books:requeue -- --all-downloaded   # recovery: reset downloaded books back to pending
 ```
 

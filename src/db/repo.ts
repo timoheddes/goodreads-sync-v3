@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, notInArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm';
 import { db } from './index.js';
 import { books, shelfState, userBooks, users } from './schema.js';
 
@@ -256,6 +256,50 @@ export function insertManualBook(data: {
     })
     .returning()
     .get();
+}
+
+// ---- daily digest (Phase 3) ----
+
+/**
+ * Books downloaded for this user that haven't been included in a digest
+ * yet (userBooks.notifiedAt is null). Once reported, notifiedAt gets set
+ * so they never appear in a digest again -- see markUserBooksNotified.
+ */
+export function getUnnotifiedDownloadedBooksForUser(userId: number) {
+  return db
+    .select({ id: books.id, title: books.title, author: books.author })
+    .from(books)
+    .innerJoin(userBooks, eq(userBooks.bookId, books.id))
+    .where(and(eq(userBooks.userId, userId), eq(books.status, 'downloaded'), isNull(userBooks.notifiedAt)))
+    .all();
+}
+
+/**
+ * Books still being searched for (status='not_found', i.e. at least one
+ * failed attempt so far). Unlike the "found" list, this isn't gated by
+ * notifiedAt -- it's reported every digest for as long as the book stays
+ * unresolved, since "still looking" is an ongoing status rather than a
+ * one-off event.
+ */
+export function getStillSearchingBooksForUser(userId: number) {
+  return db
+    .select({ id: books.id, title: books.title, author: books.author })
+    .from(books)
+    .innerJoin(userBooks, eq(userBooks.bookId, books.id))
+    .where(and(eq(userBooks.userId, userId), eq(books.status, 'not_found')))
+    .all();
+}
+
+export function markUserBooksNotified(userId: number, bookIds: number[], now: Date = new Date()): void {
+  if (bookIds.length === 0) return;
+  db.update(userBooks)
+    .set({ notifiedAt: now })
+    .where(and(eq(userBooks.userId, userId), inArray(userBooks.bookId, bookIds)))
+    .run();
+}
+
+export function markDigestSent(userId: number, now: Date = new Date()): void {
+  db.update(users).set({ lastDigestSentAt: now }).where(eq(users.id, userId)).run();
 }
 
 export function countPending(): number {

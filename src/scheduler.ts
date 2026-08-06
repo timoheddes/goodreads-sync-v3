@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { runCycle } from './cycle.js';
 import { scanAllUserFolders } from './folderScan.js';
+import { sendDailyDigests } from './digest.js';
 import { listUsers } from './db/repo.js';
 import { sleep } from './utils.js';
 
@@ -35,6 +36,10 @@ async function waitForFlareSolverr(maxRetries = 30, intervalMs = 5000): Promise<
  *    for testing without waiting for the schedule, and via
  *    `npm run folders:scan` / `node dist/cli/scan-folders.js` outside the
  *    running process entirely.
+ *  - daily digest (Phase 3): once a day (config.digestCronSchedule), emails
+ *    each user a summary if there's anything to report. No signal for this
+ *    one -- use `npm run digest:send` / `node dist/cli/send-digest.js` to
+ *    trigger it manually, same idea as the folder scan's CLI escape hatch.
  * The dashboard (Phase 4) will add buttons that do the same thing via the API.
  */
 export function startScheduler(): void {
@@ -56,8 +61,16 @@ export function startScheduler(): void {
     scanAllUserFolders(listUsers());
   });
 
+  cron.schedule(config.digestCronSchedule, () => {
+    void sendDailyDigests();
+  });
+
   logger.info(
-    { syncSchedule: config.syncCronSchedule, folderScanSchedule: config.folderScanCronSchedule },
+    {
+      syncSchedule: config.syncCronSchedule,
+      folderScanSchedule: config.folderScanCronSchedule,
+      digestSchedule: config.digestCronSchedule,
+    },
     'Scheduler started'
   );
 
