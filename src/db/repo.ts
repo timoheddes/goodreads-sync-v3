@@ -382,18 +382,25 @@ export function getBookById(id: number) {
   return db.select().from(books).where(eq(books.id, id)).get();
 }
 
-/** Removes a book entirely -- unlinks it from every user first, then deletes the row. */
+/** Removes books entirely -- unlinks them from every user first, then deletes the rows. */
+export function deleteBooks(ids: number[]): number {
+  if (ids.length === 0) return 0;
+  db.delete(userBooks).where(inArray(userBooks.bookId, ids)).run();
+  db.delete(books).where(inArray(books.id, ids)).run();
+  return ids.length;
+}
+
 export function deleteBook(id: number): void {
-  db.delete(userBooks).where(eq(userBooks.bookId, id)).run();
-  db.delete(books).where(eq(books.id, id)).run();
+  deleteBooks([id]);
 }
 
 /**
- * Resets a book back to `pending` (clearing file/download/backoff state) so
- * the queue picks it up again on the next cycle. Same effect as the
- * requeue-book CLI, exposed here for the dashboard's per-book retry button.
+ * Resets books back to `pending` (clearing file/download/backoff state) so
+ * the queue picks them up again on the next cycle. Same effect as the
+ * requeue-book CLI, exposed here for the dashboard's retry buttons.
  */
-export function requeueBook(id: number): void {
+export function requeueBooks(ids: number[]): number {
+  if (ids.length === 0) return 0;
   db.update(books)
     .set({
       status: 'pending',
@@ -403,14 +410,18 @@ export function requeueBook(id: number): void {
       lastError: null,
       updatedAt: new Date(),
     })
-    .where(eq(books.id, id))
+    .where(inArray(books.id, ids))
     .run();
+  return ids.length;
+}
+
+export function requeueBook(id: number): void {
+  requeueBooks([id]);
 }
 
 export function requeueAllDownloaded(): number {
   const rows = db.select({ id: books.id }).from(books).where(eq(books.status, 'downloaded')).all();
-  for (const row of rows) requeueBook(row.id);
-  return rows.length;
+  return requeueBooks(rows.map((r) => r.id));
 }
 
 export interface DashboardStats {

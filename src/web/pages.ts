@@ -148,19 +148,19 @@ export function renderBooks(opts: RenderBooksOptions): string {
     )
     .join('');
 
-  const backFields = `<input type="hidden" name="status" value="${opts.status}" /><input type="hidden" name="page" value="${opts.page}" />`;
-
+  // Every action button lives inside one shared form and points at its own
+  // endpoint via `formaction` (a plain HTML feature -- the browser submits
+  // to whichever button was clicked, no JS required). That's what lets a
+  // single checked-checkbox set feed both the per-row Retry/Remove buttons
+  // and the bulk Retry/Delete-selected buttons without nesting <form>s.
   const rows = opts.books
     .map((b) => {
       const owners = opts.usersByBookId.get(b.id) ?? [];
-      const retryForm =
-        b.status !== 'pending'
-          ? `<form class="inline" method="POST" action="/books/${b.id}/retry">${backFields}
-               <button type="submit">Retry</button>
-             </form>`
-          : '';
+      const retryButton =
+        b.status !== 'pending' ? `<button type="submit" formaction="/books/${b.id}/retry">Retry</button>` : '';
       return `
     <tr>
+      <td><input type="checkbox" name="bookIds" value="${b.id}" /></td>
       <td>
         <div>${escapeHtml(b.title || 'Untitled')}</div>
         <small class="muted">${escapeHtml(b.author || 'Unknown author')}</small>
@@ -172,10 +172,8 @@ export function renderBooks(opts: RenderBooksOptions): string {
       <td class="muted">${formatDate(b.updatedAt)}</td>
       <td>
         <div class="row-actions">
-          ${retryForm}
-          <form class="inline" method="POST" action="/books/${b.id}/delete" hx-confirm="Remove this book from the library entirely?">${backFields}
-            <button class="danger" type="submit">Remove</button>
-          </form>
+          ${retryButton}
+          <button class="danger" type="submit" formaction="/books/${b.id}/delete" hx-confirm="Remove this book from the library entirely?">Remove</button>
         </div>
       </td>
     </tr>`;
@@ -184,8 +182,8 @@ export function renderBooks(opts: RenderBooksOptions): string {
 
   const table =
     opts.books.length > 0
-      ? `<table>
-      <thead><tr><th>Book</th><th>Status</th><th>Users</th><th>Attempts</th><th>Updated</th><th></th></tr></thead>
+      ? `<table class="books-table">
+      <thead><tr><th><input type="checkbox" id="select-all" title="Select all" /></th><th>Book</th><th>Status</th><th>Users</th><th>Attempts</th><th>Updated</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`
       : `<div class="empty">No books in this view.</div>`;
@@ -199,21 +197,58 @@ export function renderBooks(opts: RenderBooksOptions): string {
     </div>`
       : '';
 
-  const requeueAll =
+  const requeueAllForm =
     opts.status === 'downloaded' && opts.total > 0
       ? `<form method="POST" action="/books/requeue-all" hx-confirm="Reset all ${opts.total} downloaded books back to pending? This does not delete the files.">
            <button type="submit">Re-queue all downloaded</button>
          </form>`
       : '';
 
+  const bulkBar =
+    opts.books.length > 0
+      ? `<div class="actions">
+      <button type="submit" formaction="/books/bulk/retry">Retry selected</button>
+      <button class="danger" type="submit" formaction="/books/bulk/delete" hx-confirm="Remove all selected books from the library entirely?">Delete selected</button>
+      <span id="selected-count" class="muted"></span>
+    </div>`
+      : '';
+
   return `
 <h1>Books</h1>
 <div class="filters">${filters}</div>
-${requeueAll ? `<div class="actions">${requeueAll}</div>` : ''}
+${requeueAllForm ? `<div class="actions">${requeueAllForm}</div>` : ''}
 <div class="card">
-  ${table}
-  ${pagination}
-</div>`;
+  <form method="POST" id="books-form" hx-boost="false">
+    <input type="hidden" name="status" value="${opts.status}" />
+    <input type="hidden" name="page" value="${opts.page}" />
+    ${bulkBar}
+    ${table}
+    ${pagination}
+  </form>
+</div>
+<script>
+(function () {
+  var form = document.getElementById('books-form');
+  if (!form) return;
+  var selectAll = document.getElementById('select-all');
+  var countEl = document.getElementById('selected-count');
+  function checkboxes() { return form.querySelectorAll('input[name="bookIds"]'); }
+  function updateCount() {
+    if (!countEl) return;
+    var checked = Array.prototype.filter.call(checkboxes(), function (cb) { return cb.checked; }).length;
+    countEl.textContent = checked > 0 ? checked + ' selected' : '';
+  }
+  if (selectAll) {
+    selectAll.addEventListener('change', function () {
+      Array.prototype.forEach.call(checkboxes(), function (cb) { cb.checked = selectAll.checked; });
+      updateCount();
+    });
+  }
+  form.addEventListener('change', function (e) {
+    if (e.target && e.target.name === 'bookIds') updateCount();
+  });
+})();
+</script>`;
 }
 
 // ---- settings ----

@@ -9,7 +9,9 @@ import {
   countBooksByStatus,
   getBookById,
   deleteBook,
+  deleteBooks,
   requeueBook,
+  requeueBooks,
   requeueAllDownloaded,
   getUsersForBook,
   type BookStatusFilter,
@@ -42,6 +44,13 @@ function booksReturnUrl(body: Record<string, string>): string {
   const status = STATUS_VALUES.includes(body.status as BookStatusFilter) ? body.status : 'all';
   const page = parseInt(body.page, 10) || 1;
   return `/books?status=${status}&page=${page}`;
+}
+
+/** Checkbox values come through form-encoded as a single string or an array, depending on how many were checked. */
+function parseBookIds(value: string | string[] | undefined): number[] {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : [value];
+  return raw.map((v) => parseInt(v, 10)).filter((n) => !Number.isNaN(n));
 }
 
 /**
@@ -163,6 +172,30 @@ export async function registerDashboardRoutes(app: FastifyInstance): Promise<voi
   app.post('/books/requeue-all', async (_req: FastifyRequest, reply: FastifyReply) => {
     const count = requeueAllDownloaded();
     redirect(reply, '/books?status=downloaded', `Re-queued ${count} book(s).`);
+  });
+
+  app.post('/books/bulk/retry', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, string | string[]>;
+    const ids = parseBookIds(body.bookIds);
+    const returnUrl = booksReturnUrl(body as Record<string, string>);
+    if (ids.length === 0) {
+      redirect(reply, returnUrl, 'No books selected.', 'error');
+      return;
+    }
+    const count = requeueBooks(ids);
+    redirect(reply, returnUrl, `Re-queued ${count} book(s).`);
+  });
+
+  app.post('/books/bulk/delete', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, string | string[]>;
+    const ids = parseBookIds(body.bookIds);
+    const returnUrl = booksReturnUrl(body as Record<string, string>);
+    if (ids.length === 0) {
+      redirect(reply, returnUrl, 'No books selected.', 'error');
+      return;
+    }
+    const count = deleteBooks(ids);
+    redirect(reply, returnUrl, `Removed ${count} book(s).`);
   });
 
   // ---- settings ----
