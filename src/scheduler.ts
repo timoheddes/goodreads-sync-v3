@@ -3,6 +3,8 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { runCycle } from './cycle.js';
+import { scanAllUserFolders } from './folderScan.js';
+import { listUsers } from './db/repo.js';
 import { sleep } from './utils.js';
 
 async function waitForFlareSolverr(maxRetries = 30, intervalMs = 5000): Promise<void> {
@@ -24,11 +26,16 @@ async function waitForFlareSolverr(maxRetries = 30, intervalMs = 5000): Promise<
 }
 
 /**
- * Starts the background sync loop: an immediate run on boot (after
- * FlareSolverr is reachable), then every config.syncCronSchedule (default
- * every 10 minutes). SIGUSR1 still works as a manual trigger, same as v2,
- * for scripting/debugging -- the dashboard (Phase 4) will add a button that
- * does the same thing via the API.
+ * Starts the background jobs:
+ *  - sync cycle: an immediate run on boot (after FlareSolverr is reachable),
+ *    then every config.syncCronSchedule (default every 10 minutes).
+ *    SIGUSR1 triggers it manually, same as v2, for scripting/debugging.
+ *  - folder scan (Phase 2): once a day (config.folderScanCronSchedule),
+ *    independent of the sync cycle. SIGUSR2 triggers it manually -- handy
+ *    for testing without waiting for the schedule, and via
+ *    `npm run folders:scan` / `node dist/cli/scan-folders.js` outside the
+ *    running process entirely.
+ * The dashboard (Phase 4) will add buttons that do the same thing via the API.
  */
 export function startScheduler(): void {
   process.on('SIGUSR1', () => {
@@ -36,11 +43,23 @@ export function startScheduler(): void {
     void runCycle('manual');
   });
 
+  process.on('SIGUSR2', () => {
+    logger.info('Received SIGUSR2 -- triggering manual folder scan');
+    scanAllUserFolders(listUsers());
+  });
+
   cron.schedule(config.syncCronSchedule, () => {
     void runCycle('cron');
   });
 
-  logger.info({ schedule: config.syncCronSchedule }, 'Scheduler started');
+  cron.schedule(config.folderScanCronSchedule, () => {
+    scanAllUserFolders(listUsers());
+  });
+
+  logger.info(
+    { syncSchedule: config.syncCronSchedule, folderScanSchedule: config.folderScanCronSchedule },
+    'Scheduler started'
+  );
 
   void (async () => {
     await sleep(5000); // let the container network settle

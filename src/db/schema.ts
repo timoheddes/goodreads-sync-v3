@@ -26,10 +26,13 @@ export const users = sqliteTable('users', {
  *   not_found   - not currently available; will keep retrying on backoff
  *                 via next_retry_at rather than being marked permanently failed
  *
- * source:
- *   goodreads   - discovered via a user's "to-read" shelf RSS
- *   manual      - discovered by scanning a user's download folder for a file
- *                 that wasn't already tracked (e.g. Timo added it by hand)
+ * source: how the *file* was obtained, not how the book entered the DB --
+ * a book discovered via Goodreads can still end up with source='manual' if
+ * a matching file turns up in the folder scan before Anna's Archive does.
+ *   goodreads   - downloaded automatically via Anna's Archive search
+ *   manual      - found sitting in a user's folder by the daily folder
+ *                 scan (either matched to a pending Goodreads book, or a
+ *                 file with no corresponding shelf entry at all)
  */
 export const books = sqliteTable('books', {
   id: integer('id').primaryKey({ autoIncrement: true }),

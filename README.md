@@ -106,6 +106,7 @@ first image has been pushed.
 | `PUID` / `PGID`   | `1000` / `1000`        | UID/GID the app should run as, matching the owner of your books share |
 | `TZ`              | `Europe/Amsterdam`     | Timezone for logs, cron schedules, and the daily digest send time |
 | `DASHBOARD_PORT`  | `47291`                | Host port for the dashboard/health check (runs with `network_mode: host`, so this is a real host port -- pick something else if it's taken too) |
+| `FOLDER_SCAN_CRON`| `0 3 * * *`            | Cron schedule for the daily folder scan (Phase 2)                |
 | `FLARE_URL`       | `http://localhost:8191/v1` | FlareSolverr endpoint                                        |
 | `DB_PATH`         | `/app/data/books.db`   | SQLite database path inside the container                       |
 | `SMTP_USER`       | _(optional)_           | Gmail address used to send the daily digest                     |
@@ -129,6 +130,32 @@ docker exec -it book-sync node dist/cli/list-users.js
 (Or via the Portainer console on the `book-sync` container.) This goes away
 once the dashboard can do the same thing from the browser.
 
+## Folder scan (Phase 2)
+
+Once a day (`FOLDER_SCAN_CRON`, default 3am), each user's download folder is
+scanned for recognized ebook files (`.epub`, `.pdf`, `.mobi`, `.azw3`,
+`.cbz`, `.cbr`) that aren't already tracked in the database:
+
+- For `.epub` files, the real title/author is read out of the file's own
+  metadata (it's a zip containing an OPF package document with Dublin Core
+  fields) -- not guessed from the filename. Other formats fall back to
+  parsing the app's own `Author - Title.ext` naming convention, or just the
+  filename as the title if that pattern isn't there.
+- If the extracted title/author fuzzy-matches one of that user's pending
+  (or still-searching) books, that book is marked `downloaded` with
+  `source=manual` instead of getting queued for an Anna's Archive search.
+- If it doesn't match anything, it's recorded as a brand new book
+  (`source=manual`) so it's visible in the database/dashboard instead of
+  being invisible to the app.
+
+To trigger a scan immediately instead of waiting for the schedule:
+
+```bash
+docker kill --signal=SIGUSR2 book-sync
+# or, as a one-off from outside the running process:
+docker exec -it book-sync node dist/cli/scan-folders.js
+```
+
 ## Dashboard (Phase 4, not yet built)
 
 Once running, the dashboard will be available at
@@ -144,9 +171,11 @@ npm install
 cp .env.example .env
 npm run db:generate   # after changing src/db/schema.ts
 npm run dev            # tsx watch, runs src/index.ts directly
-npm test                # unit tests (match/backoff logic)
+npm test                # unit tests (match/backoff/epub-metadata logic)
 npm run user:add -- "Alice" "104614681" "/downloads/Alice" "alice@example.com"
 npm run user:list
+npm run folders:scan    # run a folder scan immediately
+npm run books:requeue -- --all-downloaded   # recovery: reset downloaded books back to pending
 ```
 
 ## Data

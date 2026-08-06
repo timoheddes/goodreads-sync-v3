@@ -21,6 +21,11 @@ export const config = {
   // hourly default without hammering Goodreads or Anna's Archive.
   syncCronSchedule: process.env.SYNC_CRON || '*/10 * * * *',
 
+  // Cron expression for the folder scan (Phase 2) -- once a day by default.
+  // This walks each user's download folder, which is more I/O than the sync
+  // cycle, so it doesn't need to run anywhere near as often.
+  folderScanCronSchedule: process.env.FOLDER_SCAN_CRON || '0 3 * * *',
+
   smtpUser: process.env.SMTP_USER || '',
   smtpPass: process.env.SMTP_PASS || '',
   smtpFrom: process.env.SMTP_FROM || process.env.SMTP_USER || '',

@@ -191,6 +191,73 @@ export function countUserDownloadsToday(userId: number): number {
   return row?.cnt ?? 0;
 }
 
+// ---- folder scan (Phase 2) ----
+
+/**
+ * Filenames already known for this user -- i.e. books linked to them whose
+ * file_path is set. Used to skip files the app already put there itself
+ * (or already reconciled on a previous scan) without re-processing them
+ * every day.
+ */
+export function getTrackedFilenamesForUser(userId: number): Set<string> {
+  const rows = db
+    .select({ filePath: books.filePath })
+    .from(books)
+    .innerJoin(userBooks, eq(userBooks.bookId, books.id))
+    .where(and(eq(userBooks.userId, userId), sql`${books.filePath} is not null`))
+    .all();
+  return new Set(rows.map((r) => r.filePath).filter((f): f is string => !!f));
+}
+
+/** A user's books that are still waiting to be found -- candidates an unrecognized file might match. */
+export function getPendingBooksForUser(userId: number) {
+  return db
+    .select({ id: books.id, title: books.title, author: books.author })
+    .from(books)
+    .innerJoin(userBooks, eq(userBooks.bookId, books.id))
+    .where(
+      and(eq(userBooks.userId, userId), or(eq(books.status, 'pending'), eq(books.status, 'not_found')))
+    )
+    .all();
+}
+
+/** An untracked file matched an existing pending/not_found book: mark it fulfilled manually. */
+export function markManualMatch(bookId: number, filename: string, foundAt: Date) {
+  db.update(books)
+    .set({
+      status: 'downloaded',
+      source: 'manual',
+      filePath: filename,
+      downloadedAt: foundAt,
+      nextRetryAt: null,
+      lastError: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(books.id, bookId))
+    .run();
+}
+
+/** An untracked file didn't match anything on the shelf: record it as a new manual book. */
+export function insertManualBook(data: {
+  title: string | null;
+  author: string | null;
+  filePath: string;
+  foundAt: Date;
+}) {
+  return db
+    .insert(books)
+    .values({
+      title: data.title,
+      author: data.author,
+      source: 'manual',
+      status: 'downloaded',
+      filePath: data.filePath,
+      downloadedAt: data.foundAt,
+    })
+    .returning()
+    .get();
+}
+
 export function countPending(): number {
   const row = db
     .select({ cnt: sql<number>`count(*)` })
