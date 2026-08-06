@@ -25,6 +25,6 @@ fi
 # chowning a large book library on every container start would be slow and
 # is unnecessary as long as PUID/PGID already match the share's owner.
 mkdir -p /app/data
-chown -R appuser:appuser /app/data
+chown -R appuser:appgroup /app/data
 
-exec gosu appuser:appuser "$@"
+exec gosu appuser:appgroup "$@"
