@@ -14,7 +14,7 @@ CURRENT_UID=$(id -u appuser)
 CURRENT_GID=$(id -g appuser)
 
 if [ "$CURRENT_GID" != "$PGID" ]; then
-  groupmod -o -g "$PGID" appuser
+  groupmod -o -g "$PGID" appgroup
 fi
 
 if [ "$CURRENT_UID" != "$PUID" ]; then
