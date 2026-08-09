@@ -56,21 +56,17 @@ interface FastDownloadResponse {
 }
 
 /**
- * Condenses an axios response body down to a short, loggable/storable
- * string. The body isn't guaranteed to be the typed FastDownloadResponse
- * shape at runtime -- a non-200 can come back as JSON, plain text, or an
- * HTML error/interstitial page depending on what rejected the request
- * (Anna's Archive itself vs. a proxy/CDN in front of it) -- so this
- * handles whatever axios actually parsed rather than assuming.
- *
- * Anna's Archive's own error responses are self-documenting -- a rejected
- * request comes back with a `download_url`-shaped key whose value is an
- * array of explanatory sentences (API usage docs, then the specific
- * reason). That preamble alone runs past 300 characters, which is what
- * used to get cut off here before the actual reason ever appeared -- see
- * the 300-char version of this function in an earlier commit for what
- * that looked like. 1500 comfortably fits the whole thing while still
- * bounding a pathological case like a full HTML error page.
+ * Condenses an axios response body down to a bounded string -- used as a
+ * fallback for the isInvalidIndexError check below (when the body isn't
+ * JSON-shaped enough to have an `error` field) and for the full-body log
+ * line. Not shown on the dashboard (see attemptFastDownload) -- Anna's
+ * Archive's error responses are self-documenting (API usage docs baked
+ * into the JSON before the actual reason), which reads as noise there.
+ * The body isn't guaranteed to be the typed FastDownloadResponse shape at
+ * runtime -- a non-200 can come back as JSON, plain text, or an HTML
+ * error/interstitial page depending on what rejected the request (Anna's
+ * Archive itself vs. a proxy/CDN in front of it) -- so this handles
+ * whatever axios actually parsed rather than assuming.
  */
 function summarizeResponseBody(data: unknown, maxLength = 1500): string {
   if (data === null || data === undefined || data === '') return '(empty body)';
@@ -123,6 +119,11 @@ async function attemptFastDownload(
     return { downloadUrl: response.data.download_url, isInvalidIndexError: false };
   }
 
+  // The full body only goes to the logs (see below), not into the thrown
+  // message -- that ends up stored in books.last_error and shown right on
+  // the dashboard, where a 1500-char API response dump is just clutter.
+  // Anyone who needs the actual body can check the container logs, same
+  // as diagnosing "There Is No Antimemetics Division" did.
   const bodySnippet = summarizeResponseBody(response.data);
   const isInvalidIndexError = /invalid domain_index or path_index/i.test(apiError ?? bodySnippet);
 
@@ -133,7 +134,7 @@ async function attemptFastDownload(
 
   const errorMessage =
     response.status !== 200
-      ? `fast_download.json returned HTTP ${response.status}: ${bodySnippet}`
+      ? `fast_download.json returned HTTP ${response.status} -- see container logs for the response body`
       : `fast_download.json error: ${apiError || 'no download_url in response'}`;
 
   return { errorMessage, isInvalidIndexError };
