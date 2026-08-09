@@ -35,15 +35,21 @@ export interface AnnaMatch {
 
 /**
  * Searches Anna's Archive for a book by query string, fuzzy-matching the top
- * results against the expected title/author. Returns the matching record's
- * domain + md5 (enough to resolve an actual download URL via the fast
- * download JSON API in download.ts), or null if nothing matched.
+ * results against the expected title/author. Returns EVERY matching
+ * record's domain + md5 from the first domain that yields any match (not
+ * just the first result) -- Anna's Archive commonly has multiple uploads/
+ * scans of the same book under different md5s, and not every one of them
+ * is actually fast-downloadable (confirmed via a real book where the top
+ * match's md5 rejected every path/domain index combo, while a different
+ * md5 for the same title worked fine). download.ts tries each candidate
+ * in order until one resolves. Returns an empty array if nothing matched
+ * anywhere.
  */
 export async function findBookOnAnna(
   query: string,
   expectedTitle: string | null,
   expectedAuthor: string | null
-): Promise<AnnaMatch | null> {
+): Promise<AnnaMatch[]> {
   const searchParams = 'search?index=&page=1&sort=&ext=epub&lang=en&lang=fr&lang=nl&display=&q=';
 
   for (const domain of config.annasArchiveDomains) {
@@ -75,6 +81,7 @@ export async function findBookOnAnna(
     }
 
     const toCheck = Math.min(resultDivs.length, config.maxSearchResultsToCheck);
+    const matches: AnnaMatch[] = [];
 
     for (let r = 0; r < toCheck; r++) {
       const el = $(resultDivs[r]);
@@ -96,13 +103,18 @@ export async function findBookOnAnna(
 
       if (match.isMatch) {
         logger.info({ resultTitle, resultAuthor, domain, md5 }, '[Search] Match found');
-        return { domain, md5 };
+        matches.push({ domain, md5 });
       }
+    }
+
+    if (matches.length > 0) {
+      logger.info({ domain, count: matches.length }, '[Search] Collected candidate matches');
+      return matches;
     }
 
     logger.info({ domain, expectedTitle, expectedAuthor }, '[Search] No matching result on this domain');
   }
 
   logger.info({ expectedTitle }, '[Search] Exhausted all domains -- book not found');
-  return null;
+  return [];
 }

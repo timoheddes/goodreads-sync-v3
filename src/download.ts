@@ -141,24 +141,21 @@ async function attemptFastDownload(
 }
 
 /**
- * Resolves a matched book to an actual downloadable file URL using Anna's
- * Archive's documented member JSON API (/dyn/api/fast_download.json) --
- * NOT the /fast_download/{md5}/... HTML page, which is meant for browsers
- * and requires scraping a "Download now" link out of a page that also
- * contains plenty of other links (nav, account menu, etc.) matching naive
- * substring heuristics. This plain JSON call doesn't need FlareSolverr.
+ * Resolves a single matched record to an actual downloadable file URL
+ * using Anna's Archive's documented member JSON API
+ * (/dyn/api/fast_download.json) -- NOT the /fast_download/{md5}/... HTML
+ * page, which is meant for browsers and requires scraping a "Download now"
+ * link out of a page that also contains plenty of other links (nav,
+ * account menu, etc.) matching naive substring heuristics. This plain
+ * JSON call doesn't need FlareSolverr.
  *
  * Tries FAST_DOWNLOAD_INDEX_CANDIDATES in order, but only keeps going past
  * the first one if the failure is specifically the "invalid index" error --
- * any other rejection (bad key, exhausted quota, book genuinely
- * unavailable) will fail identically at every index, so there's no point
- * spending 4 requests to learn that once would have told us.
+ * any other rejection (bad key, exhausted quota, this particular upload
+ * genuinely unavailable) will fail identically at every index, so there's
+ * no point spending 4 requests to learn that once would have told us.
  */
 async function resolveDownloadUrl(match: AnnaMatch): Promise<string> {
-  if (!config.annasArchiveApiKey) {
-    throw new Error('AA_API_KEY is not configured -- cannot resolve a download URL');
-  }
-
   let lastErrorMessage = 'fast_download.json failed for an unknown reason';
 
   for (const { pathIndex, domainIndex } of FAST_DOWNLOAD_INDEX_CANDIDATES) {
@@ -180,20 +177,55 @@ async function resolveDownloadUrl(match: AnnaMatch): Promise<string> {
 }
 
 /**
- * Streams a matched book to a temp path. Returns the temp file path and
- * detected extension. Refuses to save anything that comes back as HTML --
- * that's what an error/interstitial page looks like, never a real ebook,
- * and saving it anyway (mislabeled with a guessed extension) is exactly
- * what caused corrupted "downloads" before this function existed.
+ * Anna's Archive frequently has multiple uploads/scans of the same book
+ * under different md5s (different source collections, different scan
+ * quality, etc.) -- and not every one is actually fast-downloadable, even
+ * after sweeping path/domain indices. Confirmed via a real book where the
+ * top search match's md5 rejected every index combination, while a
+ * different md5 for the exact same title/author resolved fine on the
+ * first try. Rather than give up on the whole book over one bad upload,
+ * this tries every candidate findBookOnAnna returned, in the order it
+ * found them, and only fails once all of them have.
+ */
+async function resolveDownloadUrlFromCandidates(matches: AnnaMatch[]): Promise<string> {
+  if (!config.annasArchiveApiKey) {
+    throw new Error('AA_API_KEY is not configured -- cannot resolve a download URL');
+  }
+
+  let lastError = new Error('No candidate matches to try');
+
+  for (const match of matches) {
+    try {
+      return await resolveDownloadUrl(match);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      logger.warn(
+        { err: lastError, domain: match.domain, md5: match.md5 },
+        '[Download] Candidate match failed, trying the next one if available'
+      );
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Streams a matched book to a temp path, trying each candidate match in
+ * order (see resolveDownloadUrlFromCandidates) until one resolves. Returns
+ * the temp file path and detected extension. Refuses to save anything
+ * that comes back as HTML -- that's what an error/interstitial page looks
+ * like, never a real ebook, and saving it anyway (mislabeled with a
+ * guessed extension) is exactly what caused corrupted "downloads" before
+ * this function existed.
  */
 export async function downloadBook(
-  match: AnnaMatch,
+  matches: AnnaMatch[],
   bookInfo: { title: string | null; author: string | null }
 ): Promise<{ filePath: string; extension: string }> {
   const tempDir = path.join(path.dirname(config.dbPath), 'tmp');
   fs.mkdirSync(tempDir, { recursive: true });
 
-  const finalUrl = await resolveDownloadUrl(match);
+  const finalUrl = await resolveDownloadUrlFromCandidates(matches);
 
   logger.info('[Download] Starting stream download...');
   const response = await axios.get(finalUrl, {
