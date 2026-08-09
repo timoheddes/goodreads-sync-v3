@@ -81,7 +81,7 @@ h2 { font-size: 1.05rem; margin: 0 0 12px; }
 .stat .value { font-size: 1.8rem; font-weight: 700; }
 .stat .label { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 0.9rem; vertical-align: top; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 0.9rem; vertical-align: middle; }
 th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 .badge-downloaded { background: var(--accent-light); color: var(--accent); }
@@ -96,7 +96,7 @@ button.danger:hover { background: var(--danger-light); border-color: var(--dange
 button.primary { background: var(--accent); color: white; border-color: var(--accent); }
 button.primary:hover { opacity: 0.9; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
 .flash { padding: 10px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
 .flash-success { background: var(--accent-light); color: var(--accent); }
 .flash-error { background: var(--danger-light); color: var(--danger); }
