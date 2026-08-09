@@ -79,45 +79,103 @@ function summarizeResponseBody(data: unknown, maxLength = 1500): string {
 }
 
 /**
- * Resolves a matched book to an actual downloadable file URL using Anna's
- * Archive's documented member JSON API (/dyn/api/fast_download.json) --
- * NOT the /fast_download/{md5}/... HTML page, which is meant for browsers
- * and requires scraping a "Download now" link out of a page that also
- * contains plenty of other links (nav, account menu, etc.) matching naive
- * substring heuristics. This plain JSON call doesn't need FlareSolverr.
+ * path_index/domain_index identify which copy of a file to fetch -- per
+ * Anna's Archive's own docs, domain_index picks the download server (e.g.
+ * 0 = "Fast Partner Server #1") and path_index picks the collection, for
+ * files present in more than one. Omitting both maps to (0, 0) server-side,
+ * which is usually right -- but confirmed via a real failure that some
+ * files simply aren't available at (0, 0) and the API rejects the request
+ * with "Invalid domain_index or path_index" instead of falling back on its
+ * own. These candidates are tried in order on that specific error; the
+ * exact number of partner servers/collections isn't documented, so this is
+ * a bounded best-effort sweep, not a guarantee.
  */
-async function resolveDownloadUrl(match: AnnaMatch): Promise<string> {
-  if (!config.annasArchiveApiKey) {
-    throw new Error('AA_API_KEY is not configured -- cannot resolve a download URL');
-  }
+const FAST_DOWNLOAD_INDEX_CANDIDATES: Array<{ pathIndex: number; domainIndex: number }> = [
+  { pathIndex: 0, domainIndex: 0 },
+  { pathIndex: 0, domainIndex: 1 },
+  { pathIndex: 0, domainIndex: 2 },
+  { pathIndex: 1, domainIndex: 0 },
+];
 
-  const apiUrl = `https://${match.domain}/dyn/api/fast_download.json?md5=${match.md5}&key=${config.annasArchiveApiKey}`;
+interface FastDownloadAttempt {
+  downloadUrl?: string;
+  errorMessage?: string;
+  isInvalidIndexError: boolean;
+}
+
+async function attemptFastDownload(
+  match: AnnaMatch,
+  pathIndex: number,
+  domainIndex: number
+): Promise<FastDownloadAttempt> {
+  const apiUrl =
+    `https://${match.domain}/dyn/api/fast_download.json?md5=${match.md5}&key=${config.annasArchiveApiKey}` +
+    `&path_index=${pathIndex}&domain_index=${domainIndex}`;
   const response = await axios.get<FastDownloadResponse>(apiUrl, {
     timeout: 30000,
     headers: { 'User-Agent': BROWSER_USER_AGENT },
     validateStatus: () => true,
   });
 
-  if (response.status !== 200) {
-    // Non-200 means something rejected the request before we even get to
-    // a download_url/error field -- an invalid or quota-exhausted API key,
-    // a stale md5, or a flaky front server on Anna's Archive's end are all
-    // plausible. The response body (logged in full, truncated in the
-    // thrown message so it fits in the books.last_error column) is the
-    // only way to tell which.
-    const bodySnippet = summarizeResponseBody(response.data);
-    logger.error(
-      { status: response.status, domain: match.domain, md5: match.md5, body: response.data },
-      '[Download] fast_download.json returned a non-200 response'
-    );
-    throw new Error(`fast_download.json returned HTTP ${response.status}: ${bodySnippet}`);
-  }
-  if (!response.data?.download_url) {
-    throw new Error(`fast_download.json error: ${response.data?.error || 'no download_url in response'}`);
+  const apiError = typeof response.data === 'object' && response.data !== null ? response.data.error : undefined;
+
+  if (response.status === 200 && response.data?.download_url) {
+    return { downloadUrl: response.data.download_url, isInvalidIndexError: false };
   }
 
-  logger.info({ downloadUrl: response.data.download_url }, '[Download] Resolved via fast_download.json API');
-  return response.data.download_url;
+  const bodySnippet = summarizeResponseBody(response.data);
+  const isInvalidIndexError = /invalid domain_index or path_index/i.test(apiError ?? bodySnippet);
+
+  logger.warn(
+    { status: response.status, pathIndex, domainIndex, domain: match.domain, md5: match.md5, body: response.data },
+    '[Download] fast_download.json attempt failed'
+  );
+
+  const errorMessage =
+    response.status !== 200
+      ? `fast_download.json returned HTTP ${response.status}: ${bodySnippet}`
+      : `fast_download.json error: ${apiError || 'no download_url in response'}`;
+
+  return { errorMessage, isInvalidIndexError };
+}
+
+/**
+ * Resolves a matched book to an actual downloadable file URL using Anna's
+ * Archive's documented member JSON API (/dyn/api/fast_download.json) --
+ * NOT the /fast_download/{md5}/... HTML page, which is meant for browsers
+ * and requires scraping a "Download now" link out of a page that also
+ * contains plenty of other links (nav, account menu, etc.) matching naive
+ * substring heuristics. This plain JSON call doesn't need FlareSolverr.
+ *
+ * Tries FAST_DOWNLOAD_INDEX_CANDIDATES in order, but only keeps going past
+ * the first one if the failure is specifically the "invalid index" error --
+ * any other rejection (bad key, exhausted quota, book genuinely
+ * unavailable) will fail identically at every index, so there's no point
+ * spending 4 requests to learn that once would have told us.
+ */
+async function resolveDownloadUrl(match: AnnaMatch): Promise<string> {
+  if (!config.annasArchiveApiKey) {
+    throw new Error('AA_API_KEY is not configured -- cannot resolve a download URL');
+  }
+
+  let lastErrorMessage = 'fast_download.json failed for an unknown reason';
+
+  for (const { pathIndex, domainIndex } of FAST_DOWNLOAD_INDEX_CANDIDATES) {
+    const attempt = await attemptFastDownload(match, pathIndex, domainIndex);
+
+    if (attempt.downloadUrl) {
+      logger.info(
+        { downloadUrl: attempt.downloadUrl, pathIndex, domainIndex },
+        '[Download] Resolved via fast_download.json API'
+      );
+      return attempt.downloadUrl;
+    }
+
+    lastErrorMessage = attempt.errorMessage ?? lastErrorMessage;
+    if (!attempt.isInvalidIndexError) break;
+  }
+
+  throw new Error(lastErrorMessage);
 }
 
 /**
