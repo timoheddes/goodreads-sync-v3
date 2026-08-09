@@ -117,6 +117,7 @@ label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--mut
 .filters a.active { background: var(--accent); color: white; border-color: var(--accent); }
 .pagination { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
 .empty { color: var(--muted); padding: 24px 0; text-align: center; }
-.row-actions { display: flex; gap: 0px; flex-wrap: wrap; }
+.row-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.row-actions * { margin: 0; }
 .date { font-size: 0.8em; font-family: monospace; }
 `;

@@ -93,7 +93,7 @@ export async function processQueue(): Promise<QueueSummary> {
       if (!searchTerm) throw new Error('No title or author available to search');
 
       const matches = await findBookOnAnna(searchTerm, job.title, job.author);
-      if (matches.length === 0) throw new Error("Book not found on Anna's Archive");
+      if (matches.length === 0) throw new Error("Book not found");
 
       const { filePath: tempPath, extension } = await downloadBook(matches, job);
 
