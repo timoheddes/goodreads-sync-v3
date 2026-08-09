@@ -50,7 +50,14 @@ export async function findBookOnAnna(
   expectedTitle: string | null,
   expectedAuthor: string | null
 ): Promise<AnnaMatch[]> {
-  const searchParams = 'search?index=&page=1&sort=&ext=epub&lang=en&lang=fr&lang=nl&display=&q=';
+  // Repeated ext= params, same pattern Anna's Archive's own search UI uses
+  // for the existing multi-language filter (lang=en&lang=fr&lang=nl) --
+  // this used to be hardcoded to ext=epub only, which meant a book with no
+  // epub upload just never showed up as a candidate at all, regardless of
+  // whether a perfectly good pdf/mobi/azw3 copy existed. See
+  // config.annasArchiveExtensions.
+  const extParams = config.annasArchiveExtensions.map((ext) => `ext=${ext}`).join('&');
+  const searchParams = `search?index=&page=1&sort=&${extParams}&lang=en&lang=fr&lang=nl&display=&q=`;
 
   for (const domain of config.annasArchiveDomains) {
     const searchUrl = `https://${domain}/${searchParams}${encodeURIComponent(query)}`;
@@ -82,6 +89,10 @@ export async function findBookOnAnna(
 
     const toCheck = Math.min(resultDivs.length, config.maxSearchResultsToCheck);
     const matches: AnnaMatch[] = [];
+    // Kept at info level (not just the per-result debug line below) so a
+    // "why didn't this match anything" question can be answered from the
+    // default logs, without having to redeploy with LOG_LEVEL=debug first.
+    const consideredResults: { title: string; author: string; titleScore: number }[] = [];
 
     for (let r = 0; r < toCheck; r++) {
       const el = $(resultDivs[r]);
@@ -96,6 +107,7 @@ export async function findBookOnAnna(
       const md5 = md5Match[1];
 
       const match = isGoodMatch(expectedTitle, expectedAuthor, resultTitle, resultAuthor);
+      consideredResults.push({ title: resultTitle, author: resultAuthor, titleScore: match.titleScore });
       logger.debug(
         { resultTitle, resultAuthor, titleScore: match.titleScore, isMatch: match.isMatch },
         `[Search] Result #${r + 1}/${toCheck}`
@@ -112,7 +124,10 @@ export async function findBookOnAnna(
       return matches;
     }
 
-    logger.info({ domain, expectedTitle, expectedAuthor }, '[Search] No matching result on this domain');
+    logger.info(
+      { domain, expectedTitle, expectedAuthor, consideredResults },
+      '[Search] No matching result on this domain'
+    );
   }
 
   logger.info({ expectedTitle }, '[Search] Exhausted all domains -- book not found');

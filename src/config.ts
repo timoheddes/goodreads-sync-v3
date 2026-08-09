@@ -13,6 +13,13 @@ export const config = {
   flareSolverrUrl: process.env.FLARE_URL || 'http://localhost:8191/v1',
   annasArchiveApiKey: process.env.AA_API_KEY || '',
   annasArchiveDomains: ['annas-archive.li', 'annas-archive.gl'],
+  // Search was epub-only for a while, which silently excluded books that
+  // only have a PDF/mobi/azw3 upload on Anna's Archive -- confirmed via a
+  // real book search returning just one candidate, whose only upload
+  // turned out not to be fast-downloadable at all. downloadBook/folderScan
+  // already understand all of these formats, so there's no reason search
+  // shouldn't look for them too.
+  annasArchiveExtensions: ['epub', 'pdf', 'mobi', 'azw3'],
   maxSearchResultsToCheck: 5,
 
   // Cron expression for the sync cycle (RSS check + queue processing).
