@@ -38,7 +38,7 @@ function parseFlash(query: Record<string, unknown>): FlashMessage | null {
 function redirect(reply: FastifyReply, to: string, msg: string, type: 'success' | 'error' = 'success'): void {
   const sep = to.includes('?') ? '&' : '?';
   const params = `msg=${encodeURIComponent(msg)}${type === 'error' ? '&type=error' : ''}`;
-  reply.redirect(303, `${to}${sep}${params}`);
+  reply.redirect(`${to}${sep}${params}`, 303);
 }
 
 /** Books forms carry status/page as hidden fields so actions redirect back to where the user was. */
