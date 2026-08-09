@@ -62,9 +62,9 @@ export function buildDigestSubject(content: DigestContent): string {
 
 function introLine(content: DigestContent): string {
   if (content.found.length > 0) {
-    return `This is your daily book sync update. We've found ${content.found.length} today and they have been added to your library. You now have ${content.totalBooks} ${pluralize(content.totalBooks, 'book')} available to you!`;
+    return `This is your daily book sync update. We've found ${content.found.length} new books and they have been added to your library. You now have ${content.totalBooks} ${pluralize(content.totalBooks, 'book')}.`;
   }
-  return `This is your daily book sync update. We didn't find any new books today, but you still have ${content.totalBooks} ${pluralize(content.totalBooks, 'book')} available to you.`;
+  return `This is your book sync update. We didn't find any new books today, but you still have ${content.totalBooks} ${pluralize(content.totalBooks, 'book')} available to you.`;
 }
 
 // ---- plain-text version (fallback for clients that don't render HTML) ----
