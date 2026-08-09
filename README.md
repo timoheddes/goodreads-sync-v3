@@ -166,12 +166,16 @@ gets a summary -- but only if there's actually something to report:
 - **Found**: books downloaded since their last digest (source doesn't
   matter -- an Anna's Archive download and a folder-scan match both count).
   Each book is only ever reported once.
-- **Still searching, will keep retrying**: every book currently at
-  `not_found` status for that user. Unlike the found list, this one repeats
-  every day for as long as a book stays unresolved -- it's meant to read as
-  an ongoing status, not a one-off notice. Lists longer than 25 titles are
-  truncated with a "...and N more" summary; the count in the heading is
-  always the true total.
+- **Still searching, will keep retrying**: books at `not_found` status for
+  that user, with 3 or fewer failed attempts so far. Unlike the found list,
+  this one repeats every day for as long as a book stays unresolved -- it's
+  meant to read as an ongoing status, not a one-off notice. Lists longer
+  than 25 titles are truncated with a "...and N more" summary; the count in
+  the heading is always the true total. Once a book passes 3 attempts it
+  drops out of the digest -- the sync keeps retrying it indefinitely either
+  way (see "No permanent failures" above), this just stops repeating the
+  same "still looking" line every day for a book that's clearly not an easy
+  find.
 
 If a user has neither -- nothing new found, nothing outstanding -- no email
 is sent that day. Sending uses direct Gmail SMTP (`SMTP_USER`/`SMTP_PASS`),

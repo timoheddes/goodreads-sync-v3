@@ -308,19 +308,33 @@ export function getUnnotifiedDownloadedBooksForUser(userId: number) {
     .all();
 }
 
+// After this many failed attempts, a still-searching book drops out of the
+// digest -- the sync keeps retrying it forever either way (see
+// src/backoff.ts), this just stops repeating "still looking" for a book
+// that's clearly not an easy find, so the digest doesn't fill up with the
+// same stale entries every day.
+const MAX_DIGEST_ATTEMPTS = 3;
+
 /**
  * Books still being searched for (status='not_found', i.e. at least one
- * failed attempt so far). Unlike the "found" list, this isn't gated by
- * notifiedAt -- it's reported every digest for as long as the book stays
- * unresolved, since "still looking" is an ongoing status rather than a
- * one-off event.
+ * failed attempt so far, but not so many that it's stopped being worth
+ * mentioning -- see MAX_DIGEST_ATTEMPTS). Unlike the "found" list, this
+ * isn't gated by notifiedAt -- it's reported every digest for as long as
+ * the book stays under the attempt cap, since "still looking" is an
+ * ongoing status rather than a one-off event.
  */
 export function getStillSearchingBooksForUser(userId: number) {
   return db
     .select({ id: books.id, title: books.title, author: books.author })
     .from(books)
     .innerJoin(userBooks, eq(userBooks.bookId, books.id))
-    .where(and(eq(userBooks.userId, userId), eq(books.status, 'not_found')))
+    .where(
+      and(
+        eq(userBooks.userId, userId),
+        eq(books.status, 'not_found'),
+        lte(books.attempts, MAX_DIGEST_ATTEMPTS)
+      )
+    )
     .all();
 }
 
