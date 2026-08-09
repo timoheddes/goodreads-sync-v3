@@ -56,6 +56,20 @@ interface FastDownloadResponse {
 }
 
 /**
+ * Condenses an axios response body down to a short, loggable/storable
+ * string. The body isn't guaranteed to be the typed FastDownloadResponse
+ * shape at runtime -- a non-200 can come back as JSON, plain text, or an
+ * HTML error/interstitial page depending on what rejected the request
+ * (Anna's Archive itself vs. a proxy/CDN in front of it) -- so this
+ * handles whatever axios actually parsed rather than assuming.
+ */
+function summarizeResponseBody(data: unknown, maxLength = 300): string {
+  if (data === null || data === undefined || data === '') return '(empty body)';
+  const text = typeof data === 'string' ? data : JSON.stringify(data);
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+/**
  * Resolves a matched book to an actual downloadable file URL using Anna's
  * Archive's documented member JSON API (/dyn/api/fast_download.json) --
  * NOT the /fast_download/{md5}/... HTML page, which is meant for browsers
@@ -76,7 +90,18 @@ async function resolveDownloadUrl(match: AnnaMatch): Promise<string> {
   });
 
   if (response.status !== 200) {
-    throw new Error(`fast_download.json returned HTTP ${response.status}`);
+    // Non-200 means something rejected the request before we even get to
+    // a download_url/error field -- an invalid or quota-exhausted API key,
+    // a stale md5, or a flaky front server on Anna's Archive's end are all
+    // plausible. The response body (logged in full, truncated in the
+    // thrown message so it fits in the books.last_error column) is the
+    // only way to tell which.
+    const bodySnippet = summarizeResponseBody(response.data);
+    logger.error(
+      { status: response.status, domain: match.domain, md5: match.md5, body: response.data },
+      '[Download] fast_download.json returned a non-200 response'
+    );
+    throw new Error(`fast_download.json returned HTTP ${response.status}: ${bodySnippet}`);
   }
   if (!response.data?.download_url) {
     throw new Error(`fast_download.json error: ${response.data?.error || 'no download_url in response'}`);
