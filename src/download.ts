@@ -62,8 +62,17 @@ interface FastDownloadResponse {
  * HTML error/interstitial page depending on what rejected the request
  * (Anna's Archive itself vs. a proxy/CDN in front of it) -- so this
  * handles whatever axios actually parsed rather than assuming.
+ *
+ * Anna's Archive's own error responses are self-documenting -- a rejected
+ * request comes back with a `download_url`-shaped key whose value is an
+ * array of explanatory sentences (API usage docs, then the specific
+ * reason). That preamble alone runs past 300 characters, which is what
+ * used to get cut off here before the actual reason ever appeared -- see
+ * the 300-char version of this function in an earlier commit for what
+ * that looked like. 1500 comfortably fits the whole thing while still
+ * bounding a pathological case like a full HTML error page.
  */
-function summarizeResponseBody(data: unknown, maxLength = 300): string {
+function summarizeResponseBody(data: unknown, maxLength = 1500): string {
   if (data === null || data === undefined || data === '') return '(empty body)';
   const text = typeof data === 'string' ? data : JSON.stringify(data);
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
