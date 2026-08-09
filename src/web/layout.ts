@@ -91,7 +91,7 @@ td * { margin: 0.25em 0; }
 .badge-manual { background: #eef2ff; color: #4338ca; }
 .badge-goodreads { background: #f0f0ee; color: var(--muted); }
 form.inline { display: inline; }
-button, .btn { font: inherit; cursor: pointer; border: 1px solid var(--border); background: var(--card); border-radius: 6px; padding: 6px 12px; color: var(--text); text-decoration: none; display: inline-block; }
+button, .btn { font: inherit; cursor: pointer; border: 1px solid var(--border); background: var(--card); border-radius: 6px; padding: 4px 10px; font-size: 0.8em; font-family: monospace; color: var(--text); text-decoration: none; display: inline-block; }
 button:hover, .btn:hover { background: var(--accent-light); border-color: var(--accent); }
 button.danger:hover { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
 button.primary { background: var(--accent); color: white; border-color: var(--accent); }
@@ -106,7 +106,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 small.muted { display: block; }
 .error-text { font-size: 0.8em; font-family: monospace; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; width: 100%; }
-input[type="checkbox"] { width: auto; padding: 0; }
+input[type="checkbox"] { width: auto; padding: 0; margin: 0; }
 .books-table th:first-child, .books-table td:first-child { width: 32px; }
 .users-table td { vertical-align: middle; }
 label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--muted); }
@@ -118,5 +118,5 @@ label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--mut
 .pagination { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
 .empty { color: var(--muted); padding: 24px 0; text-align: center; }
 .row-actions { display: flex; gap: 0px; flex-wrap: wrap; }
-.data { font-size: 0.8em; font-family: monospace; }
+.date { font-size: 0.8em; font-family: monospace; }
 `;
