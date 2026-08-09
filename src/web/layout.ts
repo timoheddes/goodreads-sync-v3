@@ -72,7 +72,7 @@ nav { display: flex; gap: 4px; flex-wrap: wrap; }
 .nav-link { padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted); font-size: 0.9rem; }
 .nav-link:hover { background: var(--accent-light); color: var(--text); }
 .nav-link.active { background: var(--accent); color: white; }
-main { max-width: 960px; margin: 0 auto; padding: 24px; }
+main { max-width: 100vw; margin: 0 auto; padding: 24px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
 h1 { font-size: 1.3rem; margin: 0 0 16px; }
 h2 { font-size: 1.05rem; margin: 0 0 12px; }
@@ -83,6 +83,7 @@ h2 { font-size: 1.05rem; margin: 0 0 12px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 0.9rem; vertical-align: middle; }
 th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+td * { margin: 0.25em 0; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 .badge-downloaded { background: var(--accent-light); color: var(--accent); }
 .badge-pending { background: var(--warn-light); color: var(--warn); }
@@ -101,7 +102,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .flash-success { background: var(--accent-light); color: var(--accent); }
 .flash-error { background: var(--danger-light); color: var(--danger); }
 .muted { color: var(--muted); }
+.title { font-weight: 500; }
 small.muted { display: block; }
+.error-text { font-size: 0.8em; font-family: monospace; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; width: 100%; }
 input[type="checkbox"] { width: auto; padding: 0; }
 .books-table th:first-child, .books-table td:first-child { width: 32px; }
@@ -114,5 +117,6 @@ label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--mut
 .filters a.active { background: var(--accent); color: white; border-color: var(--accent); }
 .pagination { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
 .empty { color: var(--muted); padding: 24px 0; text-align: center; }
-.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.row-actions { display: flex; gap: 0px; flex-wrap: wrap; }
+.data { font-size: 0.8em; font-family: monospace; }
 `;

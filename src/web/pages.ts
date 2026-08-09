@@ -200,14 +200,14 @@ export function renderBooks(opts: RenderBooksOptions): string {
     <tr>
       <td><input type="checkbox" name="bookIds" value="${b.id}" /></td>
       <td>
-        <div>${escapeHtml(b.title || 'Untitled')}</div>
+        <div class="title">${escapeHtml(b.title || 'Untitled')}</div>
         <small class="muted">${escapeHtml(b.author || 'Unknown author')}</small>
         ${b.lastError ? `<div class="error-text">${escapeHtml(b.lastError)}</div>` : ''}
       </td>
       <td>${statusBadge(b.status)} ${sourceBadge(b.source)}</td>
       <td class="muted">${owners.length > 0 ? owners.map(escapeHtml).join(', ') : '—'}</td>
       <td class="muted">${b.attempts}</td>
-      <td class="muted">${formatDate(b.updatedAt)}</td>
+      <td class="muted date">${formatDate(b.updatedAt)}</td>
       <td>
         <div class="row-actions">
           ${retryButton}
