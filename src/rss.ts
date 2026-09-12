@@ -3,6 +3,7 @@ import axios from 'axios';
 import Parser from 'rss-parser';
 import { logger } from './logger.js';
 import { getShelfState, upsertShelfState, upsertGoodreadsBook, linkUserBook } from './db/repo.js';
+import { collapseWhitespace } from './utils.js';
 import type { users } from './db/schema.js';
 
 type UserRow = typeof users.$inferSelect;
@@ -89,8 +90,13 @@ export async function syncUserShelf(user: UserRow): Promise<{ newBooks: number; 
       if (isbn13Match) isbn = isbn13Match[1];
     }
 
-    const title = item.title || null;
-    const author = item.author_name || item.creator || null;
+    // Goodreads' RSS feed occasionally has irregular whitespace in these
+    // fields (confirmed: an author_name of "Thomas  Harris", double space)
+    // -- collapse it here so nothing downstream (the Anna's Archive search
+    // query in particular) ever has to deal with it.
+    const rawAuthor = item.author_name || item.creator || null;
+    const title = item.title ? collapseWhitespace(item.title) : null;
+    const author = rawAuthor ? collapseWhitespace(rawAuthor) : null;
 
     const { book, isNew } = upsertGoodreadsBook({ goodreadsBookId, isbn, title, author });
     linkUserBook(user.id, book.id);

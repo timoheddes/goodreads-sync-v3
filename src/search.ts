@@ -33,6 +33,82 @@ export interface AnnaMatch {
   md5: string;
 }
 
+export interface ParsedResult {
+  title: string;
+  author: string;
+  md5: string;
+}
+
+/**
+ * Parses an Anna's Archive search-results page (the raw HTML FlareSolverr
+ * already fetched) into up to `limit` candidate records, most-relevant
+ * first (Anna's Archive's own ranking, not re-sorted here). Pulled out as
+ * its own pure function -- no network, no FlareSolverr -- specifically so
+ * a real page dump can be pinned in search.test.ts as a fixture and this
+ * keeps working (or fails loudly in CI) across whatever Anna's Archive
+ * does to their markup next. See the comment on the a.js-vim-focus
+ * selector below for why *that* rather than a wrapper div is what this
+ * anchors on.
+ */
+export function parseSearchResultsHtml(html: string, limit: number): ParsedResult[] {
+  const $ = cheerio.load(html);
+
+  // Anna's Archive redid their results markup in Tailwind (confirmed via a
+  // real page dump -- the old `div.js-aarecord-list-outer` wrapper this
+  // used to key off of turned out to appear in more than one place on the
+  // page, apparently duplicated by their own template for a "partial
+  // results" case ("<!-- Keep in sync with below (partial results) -->"
+  // right next to it), and something about that ambiguity made every
+  // single search on a real book come back as "no container found" even
+  // though the book was genuinely in the results. Anchoring on the outer
+  // wrapper div at all turned out to be the fragile part -- what's actually
+  // stable across a full redesign is the per-record markup Anna's Archive's
+  // own keyboard-navigation feature depends on: every result title is an
+  // `a.js-vim-focus` (referenced directly in their own inline <script>, so
+  // it's much less likely to get casually renamed than a layout wrapper
+  // class), and that same anchor's href is the /md5/ link, so one selector
+  // now gets both the title and the identifier that used to need a
+  // separate a[href^="/md5/"] lookup.
+  const titleLinks = $('a.js-vim-focus');
+  const toCheck = Math.min(titleLinks.length, limit);
+  const results: ParsedResult[] = [];
+
+  for (let r = 0; r < toCheck; r++) {
+    const titleLink = $(titleLinks[r]);
+    const title = titleLink.text().trim();
+    const md5Href = titleLink.attr('href');
+    if (!md5Href) continue;
+    const md5Match = md5Href.match(/\/md5\/([a-fA-F0-9]+)/);
+    if (!md5Match) continue;
+
+    // The author link is a sibling of the title link, not a descendant --
+    // scope the lookup to the nearest Tailwind "row" ancestor (the same
+    // per-record wrapper the old code searched via container.children)
+    // rather than the whole page, which would just find the page's *first*
+    // author link for every single result.
+    const row = titleLink.closest('.flex');
+    const authorLink = row.find('span[class*="icon-[mdi--user-edit]"]').closest('a');
+    const author = authorLink.text().trim();
+
+    results.push({ title, author, md5: md5Match[1] });
+  }
+
+  return results;
+}
+
+/**
+ * Soft diagnostic signal only, not used to decide whether to keep
+ * searching: distinguishes a genuine zero-results page (this present but
+ * empty) from a response that isn't a normal results page at all (this
+ * absent too -- a Cloudflare interstitial, a rate limit, or a redesign
+ * that renamed js-vim-focus as well), so the two get logged at different
+ * severities. See parseSearchResultsHtml's doc comment for why the actual
+ * result-finding logic no longer depends on this element at all.
+ */
+export function pageHasResultsSection(html: string): boolean {
+  return cheerio.load(html)('div.js-aarecord-list-outer').length > 0;
+}
+
 /**
  * Builds the query-string portion of an Anna's Archive search URL (the
  * bit between "search?" and the "&q=<query>" tail), from config. Pulled
@@ -95,44 +171,34 @@ export async function findBookOnAnna(
     if (!flareResult) continue;
 
     const html = flareResult.solution.response;
-    const $ = cheerio.load(html);
+    const parsedResults = parseSearchResultsHtml(html, config.maxSearchResultsToCheck);
 
-    const container = $('div.js-aarecord-list-outer');
-    if (container.length === 0) {
-      logger.warn({ domain }, '[Search] Results container not found -- page structure may have changed');
+    if (parsedResults.length === 0) {
+      if (pageHasResultsSection(html)) {
+        logger.info({ domain, query }, '[Search] No results found');
+      } else {
+        logger.warn(
+          { domain, query },
+          "[Search] No result rows found at all -- page structure may have changed, or Anna's Archive didn't return a normal results page"
+        );
+      }
       continue;
     }
 
-    const resultDivs = container.children('div');
-    if (resultDivs.length === 0) {
-      logger.info({ domain, query }, '[Search] No results found');
-      continue;
-    }
-
-    const toCheck = Math.min(resultDivs.length, config.maxSearchResultsToCheck);
     const matches: AnnaMatch[] = [];
     // Kept at info level (not just the per-result debug line below) so a
     // "why didn't this match anything" question can be answered from the
     // default logs, without having to redeploy with LOG_LEVEL=debug first.
     const consideredResults: { title: string; author: string; titleScore: number }[] = [];
 
-    for (let r = 0; r < toCheck; r++) {
-      const el = $(resultDivs[r]);
-      const resultTitle = el.find('a.js-vim-focus').first().text().trim();
-      const authorLink = el.find('span[class*="icon-[mdi--user-edit]"]').closest('a');
-      const resultAuthor = authorLink.text().trim();
-      const md5Href = el.find('a[href^="/md5/"]').first().attr('href');
-
-      if (!md5Href) continue;
-      const md5Match = md5Href.match(/\/md5\/([a-fA-F0-9]+)/);
-      if (!md5Match) continue;
-      const md5 = md5Match[1];
+    for (let r = 0; r < parsedResults.length; r++) {
+      const { title: resultTitle, author: resultAuthor, md5 } = parsedResults[r];
 
       const match = isGoodMatch(expectedTitle, expectedAuthor, resultTitle, resultAuthor);
       consideredResults.push({ title: resultTitle, author: resultAuthor, titleScore: match.titleScore });
       logger.debug(
         { resultTitle, resultAuthor, titleScore: match.titleScore, isMatch: match.isMatch },
-        `[Search] Result #${r + 1}/${toCheck}`
+        `[Search] Result #${r + 1}/${parsedResults.length}`
       );
 
       if (match.isMatch) {

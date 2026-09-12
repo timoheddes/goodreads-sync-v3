@@ -4,6 +4,7 @@
  * logic is unit-testable on its own (see match.test.ts) -- callers log the
  * returned MatchResult if they want visibility.
  */
+import { collapseWhitespace } from './utils.js';
 
 /** Lowercase, strip parenthetical series info, punctuation, and extra whitespace. */
 export function normalizeText(str: string | null | undefined): string {
@@ -82,8 +83,15 @@ export function sanitizeTitleForSearch(title: string): string {
 export function buildSearchQueries(title: string | null, author: string | null): string[] {
   const trimmedTitle = (title ?? '').trim();
   const cleanTitle = sanitizeTitleForSearch(trimmedTitle) || trimmedTitle;
+  // Author isn't run through sanitizeTitleForSearch (it's not a title), but
+  // still needs the same defensive whitespace collapsing -- see
+  // collapseWhitespace's doc comment for the real book this came from.
+  const cleanAuthor = author ? collapseWhitespace(author) || null : null;
 
-  const queries = [[cleanTitle, author].filter(Boolean).join(' ').trim(), cleanTitle].filter(Boolean);
+  const queries = [
+    collapseWhitespace([cleanTitle, cleanAuthor].filter(Boolean).join(' ')),
+    cleanTitle,
+  ].filter(Boolean);
 
   return [...new Set(queries)];
 }

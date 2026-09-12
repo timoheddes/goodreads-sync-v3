@@ -75,3 +75,14 @@ test('buildSearchQueries falls back to the raw title if sanitizing empties it', 
   const queries = buildSearchQueries('(2001)', 'Arthur C. Clarke');
   assert.deepEqual(queries, ['(2001) Arthur C. Clarke', '(2001)']);
 });
+
+test('buildSearchQueries collapses a double space inside the author name', () => {
+  // Real case: Goodreads' RSS feed sent "Thomas  Harris" (double space)
+  // for "Red Dragon (Hannibal Lecter, #1)". Uncollapsed, that produced a
+  // literal "%20%20" in the Anna's Archive search URL, and every attempt
+  // came back with "Results container not found" rather than a normal
+  // empty/no-match result -- the book is on Anna's Archive, findable with
+  // a manual search using a single space.
+  const queries = buildSearchQueries('Red Dragon (Hannibal Lecter, #1)', 'Thomas  Harris');
+  assert.deepEqual(queries, ['Red Dragon Thomas Harris', 'Red Dragon']);
+});
