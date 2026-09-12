@@ -39,6 +39,55 @@ export interface MatchResult {
   authorHit: boolean;
 }
 
+/**
+ * Strips a title down to something worth typing into Anna's Archive's own
+ * search box: parenthetical and bracketed asides (series annotations like
+ * "(John Puller, #3)" or "[Book 2]"), plus a couple of common separator-
+ * based series/volume suffixes that don't use brackets at all ("Title -
+ * Book 3", "Title, Vol. 2"). This is deliberately narrower than
+ * normalizeText -- it has to produce a still-readable query string, not a
+ * lowercased comparison key, and a too-aggressive strip risks mangling a
+ * title that legitimately ends in a number.
+ *
+ * Case in point: "De ontsnapping (John Puller #3)" is on Anna's Archive
+ * under just "De ontsnapping" -- searching the full Goodreads title
+ * (including the series annotation) returns nothing, even though the book
+ * is there.
+ */
+export function sanitizeTitleForSearch(title: string): string {
+  return title
+    .replace(/[([][^)\]]*[)\]]/g, '') // "(...)" or "[...]"
+    .replace(/\s*[,\-–—]?\s*(?:book|vol\.?|volume|#)\s*\d+\.?\s*$/i, '') // trailing ", Book 3" / "- Vol. 2" / "#3" with no brackets
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Builds an ordered list of search queries to try against Anna's Archive,
+ * most specific first, stopping at whichever one actually turns up a
+ * match (see findBookOnAnnaWithFallback in search.ts). Two attempts,
+ * de-duplicated:
+ *
+ *   1. sanitized title + author -- the common case.
+ *   2. sanitized title alone -- covers cases where the author field
+ *      doesn't help or actively hurts: translated editions are often
+ *      indexed under the translator rather than (or alongside) the
+ *      actual author, which can bury the real result outside the top N
+ *      candidates (maxSearchResultsToCheck) once the author name is
+ *      folded into the query.
+ *
+ * Falls back to the raw, unsanitized title if sanitizing empties it out
+ * entirely -- defensive, shouldn't normally happen.
+ */
+export function buildSearchQueries(title: string | null, author: string | null): string[] {
+  const trimmedTitle = (title ?? '').trim();
+  const cleanTitle = sanitizeTitleForSearch(trimmedTitle) || trimmedTitle;
+
+  const queries = [[cleanTitle, author].filter(Boolean).join(' ').trim(), cleanTitle].filter(Boolean);
+
+  return [...new Set(queries)];
+}
+
 const TITLE_MATCH_THRESHOLD = 0.7;
 
 /**

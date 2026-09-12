@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeText, wordOverlap, isGoodMatch } from './match.js';
+import { normalizeText, wordOverlap, isGoodMatch, sanitizeTitleForSearch, buildSearchQueries } from './match.js';
 
 test('normalizeText strips series info, subtitle noise, and punctuation', () => {
   assert.equal(normalizeText('Consider Phlebas (Culture, #1)'), 'consider phlebas');
@@ -40,4 +40,38 @@ test('isGoodMatch accepts on title alone when no expected author is known', () =
   const result = isGoodMatch('Consider Phlebas', null, 'Consider Phlebas', 'Whoever');
   assert.equal(result.isMatch, true);
   assert.equal(result.authorChecked, false);
+});
+
+test('sanitizeTitleForSearch strips parenthetical series annotations', () => {
+  assert.equal(sanitizeTitleForSearch('De ontsnapping (John Puller #3)'), 'De ontsnapping');
+  assert.equal(sanitizeTitleForSearch('Consider Phlebas (Culture, #1)'), 'Consider Phlebas');
+});
+
+test('sanitizeTitleForSearch strips bracketed asides', () => {
+  assert.equal(sanitizeTitleForSearch('Some Book [Book 2]'), 'Some Book');
+});
+
+test('sanitizeTitleForSearch strips trailing series markers with no brackets', () => {
+  assert.equal(sanitizeTitleForSearch('Some Book, Book 3'), 'Some Book');
+  assert.equal(sanitizeTitleForSearch('Some Book - Vol. 2'), 'Some Book');
+  assert.equal(sanitizeTitleForSearch('Some Book #4'), 'Some Book');
+});
+
+test('sanitizeTitleForSearch leaves a plain title untouched', () => {
+  assert.equal(sanitizeTitleForSearch('Consider Phlebas'), 'Consider Phlebas');
+});
+
+test('buildSearchQueries returns title+author then title-only as a fallback', () => {
+  const queries = buildSearchQueries('De ontsnapping (John Puller #3)', 'David Baldacci');
+  assert.deepEqual(queries, ['De ontsnapping David Baldacci', 'De ontsnapping']);
+});
+
+test('buildSearchQueries de-dupes when there is no author to add', () => {
+  const queries = buildSearchQueries('De ontsnapping (John Puller #3)', null);
+  assert.deepEqual(queries, ['De ontsnapping']);
+});
+
+test('buildSearchQueries falls back to the raw title if sanitizing empties it', () => {
+  const queries = buildSearchQueries('(2001)', 'Arthur C. Clarke');
+  assert.deepEqual(queries, ['(2001) Arthur C. Clarke', '(2001)']);
 });

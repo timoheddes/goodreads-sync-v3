@@ -11,7 +11,7 @@ import {
   listUsers,
   markDownloaded,
 } from './db/repo.js';
-import { findBookOnAnna } from './search.js';
+import { findBookOnAnnaWithFallback } from './search.js';
 import { downloadBook } from './download.js';
 import { computeNextRetry } from './backoff.js';
 import { sanitizeFilename, sleep } from './utils.js';
@@ -82,17 +82,19 @@ export async function processQueue(): Promise<QueueSummary> {
       continue;
     }
 
-    const cleanTitle = (job.title || '').replace(/\(.*?\)/g, '').trim();
-    const searchTerm = [cleanTitle, job.author].filter(Boolean).join(' ').trim();
     logger.info(
       { title: job.title, author: job.author, attempt: job.attempts + 1, bookId: job.id },
       '[Queue] Processing book'
     );
 
     try {
-      if (!searchTerm) throw new Error('No title or author available to search');
+      if (!job.title && !job.author) throw new Error('No title or author available to search');
 
-      const matches = await findBookOnAnna(searchTerm, job.title, job.author);
+      // findBookOnAnnaWithFallback tries a couple of query variants itself
+      // (see buildSearchQueries in match.ts) -- e.g. stripping a Goodreads
+      // series annotation like "(John Puller #3)" that isn't part of the
+      // book's actual title on Anna's Archive.
+      const matches = await findBookOnAnnaWithFallback(job.title, job.author);
       if (matches.length === 0) throw new Error("Book not found");
 
       const { filePath: tempPath, extension } = await downloadBook(matches, job);

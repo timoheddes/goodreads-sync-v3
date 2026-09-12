@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { isGoodMatch } from './match.js';
+import { buildSearchQueries, isGoodMatch } from './match.js';
 
 interface FlareSolverrResponse {
   status: string;
@@ -131,5 +131,39 @@ export async function findBookOnAnna(
   }
 
   logger.info({ expectedTitle }, '[Search] Exhausted all domains -- book not found');
+  return [];
+}
+
+/**
+ * Entry point queue.ts actually calls. Wraps findBookOnAnna with the
+ * query fallback ladder from buildSearchQueries: tries the most specific
+ * query first and only falls back to a simpler one if that query comes
+ * back with zero matches on every domain. Most books resolve on the first
+ * (and only) query -- the fallback only costs extra FlareSolverr requests
+ * for books that were already failing outright.
+ */
+export async function findBookOnAnnaWithFallback(
+  title: string | null,
+  author: string | null
+): Promise<AnnaMatch[]> {
+  const queries = buildSearchQueries(title, author);
+
+  for (let i = 0; i < queries.length; i++) {
+    const query = queries[i];
+    const matches = await findBookOnAnna(query, title, author);
+    if (matches.length > 0) {
+      if (i > 0) {
+        logger.info(
+          { query, attempt: i + 1, of: queries.length, title, author },
+          '[Search] Fallback query succeeded after a more specific query found nothing'
+        );
+      }
+      return matches;
+    }
+  }
+
+  if (queries.length > 1) {
+    logger.info({ queries, title, author }, '[Search] All fallback queries exhausted -- book not found');
+  }
   return [];
 }
