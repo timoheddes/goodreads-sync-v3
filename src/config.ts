@@ -20,7 +20,15 @@ export const config = {
   // already understand all of these formats, so there's no reason search
   // shouldn't look for them too.
   annasArchiveExtensions: ['epub', 'pdf', 'mobi', 'azw3'],
-  maxSearchResultsToCheck: 5,
+  // Raised from 5: search.ts no longer filters by language (see
+  // buildSearchParams's comment -- a lang=en filter provably hid an
+  // English-tagged match), so a popular title's foreign-language
+  // translations can now appear ahead of the real match in Anna's
+  // Archive's own ranking. Checking more candidates before giving up
+  // costs a few extra isGoodMatch comparisons per search, not extra
+  // requests -- cheap insurance against the real match sitting just
+  // past the old cutoff.
+  maxSearchResultsToCheck: 15,
 
   // Cron expression for the sync cycle (RSS check + queue processing).
   // Every 10 minutes by default -- cheap because of the feed-hash

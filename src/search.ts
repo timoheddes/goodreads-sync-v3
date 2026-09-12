@@ -34,6 +34,35 @@ export interface AnnaMatch {
 }
 
 /**
+ * Builds the query-string portion of an Anna's Archive search URL (the
+ * bit between "search?" and the "&q=<query>" tail), from config. Pulled
+ * out into its own pure function so a regression -- e.g. a language
+ * filter silently creeping back in -- shows up as a failing unit test
+ * instead of a mysteriously not-found book (see search.test.ts).
+ *
+ * Deliberately does NOT filter by language. It used to hardcode
+ * lang=en&lang=fr&lang=nl (repeated params, same pattern Anna's Archive's
+ * own search UI uses for its multi-select language filter), on the
+ * assumption that narrowing to languages the user actually reads would
+ * cut down on foreign-language noise. Confirmed via a real book
+ * ("Japanese Gothic" by Kylie Lee Baker) that this backfires: Anna's
+ * Archive's own UI lists the exact matching record as tagged "English
+ * [en]", but applying the lang=en filter (in the UI, reproduced manually)
+ * makes that same record disappear from the results entirely -- whatever
+ * is going on internally, the filter doesn't reliably mean what its own
+ * badges say. Since isGoodMatch never checked language anyway (only
+ * title/author), the filter was pure narrowing with no correctness
+ * benefit, and a demonstrated false-negative cost. See
+ * config.maxSearchResultsToCheck, raised alongside this removal to absorb
+ * the wider, unfiltered result set without losing the real match past the
+ * cutoff.
+ */
+export function buildSearchParams(): string {
+  const extParams = config.annasArchiveExtensions.map((ext) => `ext=${ext}`).join('&');
+  return `search?index=&page=1&sort=&${extParams}&display=&q=`;
+}
+
+/**
  * Searches Anna's Archive for a book by query string, fuzzy-matching the top
  * results against the expected title/author. Returns EVERY matching
  * record's domain + md5 from the first domain that yields any match (not
@@ -50,14 +79,7 @@ export async function findBookOnAnna(
   expectedTitle: string | null,
   expectedAuthor: string | null
 ): Promise<AnnaMatch[]> {
-  // Repeated ext= params, same pattern Anna's Archive's own search UI uses
-  // for the existing multi-language filter (lang=en&lang=fr&lang=nl) --
-  // this used to be hardcoded to ext=epub only, which meant a book with no
-  // epub upload just never showed up as a candidate at all, regardless of
-  // whether a perfectly good pdf/mobi/azw3 copy existed. See
-  // config.annasArchiveExtensions.
-  const extParams = config.annasArchiveExtensions.map((ext) => `ext=${ext}`).join('&');
-  const searchParams = `search?index=&page=1&sort=&${extParams}&lang=en&lang=fr&lang=nl&display=&q=`;
+  const searchParams = buildSearchParams();
 
   for (const domain of config.annasArchiveDomains) {
     const searchUrl = `https://${domain}/${searchParams}${encodeURIComponent(query)}`;
