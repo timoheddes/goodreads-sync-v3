@@ -2,7 +2,14 @@ import crypto from 'node:crypto';
 import axios from 'axios';
 import Parser from 'rss-parser';
 import { logger } from './logger.js';
-import { getShelfState, upsertShelfState, upsertGoodreadsBook, linkUserBook } from './db/repo.js';
+import {
+  getShelfState,
+  upsertShelfState,
+  upsertGoodreadsBook,
+  linkUserBook,
+  getUsersForBook,
+} from './db/repo.js';
+import { findExistingCopyForBook, copyExistingFileToUser } from './bookCopy.js';
 import { collapseWhitespace } from './utils.js';
 import type { users } from './db/schema.js';
 
@@ -99,6 +106,28 @@ export async function syncUserShelf(user: UserRow): Promise<{ newBooks: number; 
     const author = rawAuthor ? collapseWhitespace(rawAuthor) : null;
 
     const { book, isNew } = upsertGoodreadsBook({ goodreadsBookId, isbn, title, author });
+
+    if (book.status === 'downloaded') {
+      // This user's shelf sync just linked them to a book someone else
+      // already has. A `downloaded` book never gets revisited by the
+      // queue (getNextEligibleBook only considers pending/not_found
+      // rows), so this is the only chance to get this user a copy without
+      // a manual intervention -- see findExistingCopyForBook's doc
+      // comment. otherUsers is fetched *before* linkUserBook below so it
+      // can't include this user themselves (who obviously doesn't have
+      // the file yet).
+      const otherUsers = getUsersForBook(book.id);
+      const existing = findExistingCopyForBook(book, otherUsers);
+      if (existing) {
+        copyExistingFileToUser(existing, user);
+      } else {
+        logger.warn(
+          { user: user.name, title: book.title, author: book.author, bookId: book.id },
+          "[RSS] Book already marked downloaded but no copy found in any linked user's folder -- can't fulfil the new link automatically"
+        );
+      }
+    }
+
     linkUserBook(user.id, book.id);
 
     if (isNew) {

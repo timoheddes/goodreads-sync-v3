@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSearchParams, parseSearchResultsHtml, pageHasResultsSection } from './search.js';
+import { buildSearchParams, parseSearchResultsHtml, pageHasResultsSection, isAntiBotChallengePage } from './search.js';
 
 test('buildSearchParams does not filter by language', () => {
   // Regression guard: search.ts used to hardcode lang=en&lang=fr&lang=nl,
@@ -104,4 +104,22 @@ test('parseSearchResultsHtml returns an empty array for a page with no result ro
 test('pageHasResultsSection is true for a real results page and false otherwise', () => {
   assert.equal(pageHasResultsSection(TAILWIND_RESULTS_HTML), true);
   assert.equal(pageHasResultsSection('<html><body>nothing here</body></html>'), false);
+});
+
+// Real (trimmed) response body from a live search, captured via the
+// diagnostic htmlSnippet logging added for Bugs fixed #11 -- Anna's
+// Archive returning a DDoS-Guard anti-bot challenge instead of results,
+// with an HTTP 200 from FlareSolverr's own point of view. This is what
+// made "Red Dragon" and "De ontsnapping" both fail with "no result rows
+// found at all" even on a plain, single-word query known to return
+// hundreds of hits when typed into Anna's Archive's search box by hand.
+const DDOS_GUARD_CHALLENGE_HTML = `<html><head><title>DDOS-GUARD</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/.well-known/ddos-guard/ddg-captcha-page/index.css"><script defer="defer" src="/.well-known/ddos-guard/ddg-captcha-page/view.js"></script><script defer="defer" src="/.well-known/ddos-guard/ddg-captcha-page/index.js"></script></head><body><div class="container"><div class="top"><h1 id="title">Checking your browser before accessing annas-archive`;
+
+test('isAntiBotChallengePage detects a real DDoS-Guard challenge response', () => {
+  assert.equal(isAntiBotChallengePage(DDOS_GUARD_CHALLENGE_HTML), true);
+});
+
+test('isAntiBotChallengePage is false for a normal results page and a normal empty page', () => {
+  assert.equal(isAntiBotChallengePage(TAILWIND_RESULTS_HTML), false);
+  assert.equal(isAntiBotChallengePage('<html><body>no results</body></html>'), false);
 });

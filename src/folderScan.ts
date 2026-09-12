@@ -10,11 +10,10 @@ import {
   linkUserBook,
   markManualMatch,
 } from './db/repo.js';
+import { RECOGNIZED_EXTENSIONS } from './ebookExtensions.js';
 import type { users } from './db/schema.js';
 
 type UserRow = typeof users.$inferSelect;
-
-const RECOGNIZED_EXTENSIONS = new Set(['.epub', '.pdf', '.mobi', '.azw3', '.cbz', '.cbr']);
 
 function extractMetadata(filePath: string, filename: string): BookMeta {
   if (path.extname(filename).toLowerCase() === '.epub') {

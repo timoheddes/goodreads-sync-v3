@@ -12,6 +12,7 @@ import {
   markDownloaded,
 } from './db/repo.js';
 import { findBookOnAnnaWithFallback } from './search.js';
+import { findExistingCopyForBook, copyExistingFileToUser } from './bookCopy.js';
 import { downloadBook } from './download.js';
 import { computeNextRetry } from './backoff.js';
 import { sanitizeFilename, sleep } from './utils.js';
@@ -90,28 +91,52 @@ export async function processQueue(): Promise<QueueSummary> {
     try {
       if (!job.title && !job.author) throw new Error('No title or author available to search');
 
-      // findBookOnAnnaWithFallback tries a couple of query variants itself
-      // (see buildSearchQueries in match.ts) -- e.g. stripping a Goodreads
-      // series annotation like "(John Puller #3)" that isn't part of the
-      // book's actual title on Anna's Archive.
-      const matches = await findBookOnAnnaWithFallback(job.title, job.author);
-      if (matches.length === 0) throw new Error("Book not found");
+      // Before spending an Anna's Archive search + download on this book,
+      // check whether a copy is already sitting in a linked user's folder
+      // -- either because the book is already `downloaded` for someone
+      // else (books are shared/deduplicated across every user who has it
+      // on their shelf -- see getUsersForBook/linkUserBook), or because a
+      // previous download's file is still there even though this row got
+      // reset back to pending (e.g. the dashboard's "retry" button -- see
+      // findExistingCopyForBook's doc comment). Either way, use it instead
+      // of re-fetching.
+      const existingCopy = findExistingCopyForBook(job, linkedUsers);
+      let filename: string;
 
-      const { filePath: tempPath, extension } = await downloadBook(matches, job);
+      if (existingCopy) {
+        filename = existingCopy.filename;
+        for (const user of eligibleUsers) {
+          if (user.id === existingCopy.user.id) continue; // already has it
+          copyExistingFileToUser(existingCopy, user);
+        }
+        logger.info(
+          { title: job.title, author: job.author, fromUser: existingCopy.user.name },
+          "[Queue] Found in another user's folder -- skipped Anna's Archive search"
+        );
+      } else {
+        // findBookOnAnnaWithFallback tries a couple of query variants itself
+        // (see buildSearchQueries in match.ts) -- e.g. stripping a Goodreads
+        // series annotation like "(John Puller #3)" that isn't part of the
+        // book's actual title on Anna's Archive.
+        const matches = await findBookOnAnnaWithFallback(job.title, job.author);
+        if (matches.length === 0) throw new Error("Book not found");
 
-      const safeTitle = sanitizeFilename(`${job.author || 'Unknown'} - ${job.title || 'Unknown'}`);
-      const filename = `${safeTitle}${extension}`;
+        const { filePath: tempPath, extension } = await downloadBook(matches, job);
 
-      for (const user of eligibleUsers) {
-        fs.mkdirSync(user.downloadPath, { recursive: true });
-        fs.copyFileSync(tempPath, path.join(user.downloadPath, filename));
-        logger.info({ user: user.name, filename }, '[Queue] Saved to user folder');
-      }
+        const safeTitle = sanitizeFilename(`${job.author || 'Unknown'} - ${job.title || 'Unknown'}`);
+        filename = `${safeTitle}${extension}`;
 
-      try {
-        fs.unlinkSync(tempPath);
-      } catch (cleanupErr) {
-        logger.warn({ cleanupErr, tempPath }, '[Queue] Could not delete temp file');
+        for (const user of eligibleUsers) {
+          fs.mkdirSync(user.downloadPath, { recursive: true });
+          fs.copyFileSync(tempPath, path.join(user.downloadPath, filename));
+          logger.info({ user: user.name, filename }, '[Queue] Saved to user folder');
+        }
+
+        try {
+          fs.unlinkSync(tempPath);
+        } catch (cleanupErr) {
+          logger.warn({ cleanupErr, tempPath }, '[Queue] Could not delete temp file');
+        }
       }
 
       markDownloaded(job.id, filename);

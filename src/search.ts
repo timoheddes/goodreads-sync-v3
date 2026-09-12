@@ -110,6 +110,26 @@ export function pageHasResultsSection(html: string): boolean {
 }
 
 /**
+ * Confirmed via a real diagnostic log (Bugs fixed #11 -- "Red Dragon" /
+ * "De ontsnapping" both failing with an unexplained "no result rows found
+ * at all"): Anna's Archive is sometimes gated by a DDoS-Guard anti-bot
+ * challenge/captcha page instead of returning real search results.
+ * FlareSolverr is built to solve Cloudflare's JS challenges, not
+ * DDoS-Guard's -- it still gets an HTTP 200 "successful" response from its
+ * own point of view, so `flareSolverrGet`'s own status checks don't catch
+ * this at all; only the actual page content (title "DDOS-GUARD", assets
+ * under "/.well-known/ddos-guard/") gives it away. This is a fundamentally
+ * different problem from a markup/parsing bug (nothing in
+ * parseSearchResultsHtml or the CSS selectors caused this, and no amount
+ * of selector-tweaking fixes it) -- it needs its own explicit check so the
+ * logs say plainly "we got blocked" instead of leaving it to be
+ * re-diagnosed as "maybe the markup changed again" every time.
+ */
+export function isAntiBotChallengePage(html: string): boolean {
+  return /ddos-guard/i.test(html);
+}
+
+/**
  * Builds the query-string portion of an Anna's Archive search URL (the
  * bit between "search?" and the "&q=<query>" tail), from config. Pulled
  * out into its own pure function so a regression -- e.g. a language
@@ -176,18 +196,28 @@ export async function findBookOnAnna(
     if (parsedResults.length === 0) {
       if (pageHasResultsSection(html)) {
         logger.info({ domain, query }, '[Search] No results found');
+      } else if (isAntiBotChallengePage(html)) {
+        // See isAntiBotChallengePage's doc comment -- confirmed root cause
+        // of Bugs fixed #11. Distinguished from the generic warning below
+        // specifically so this never gets mistaken for a markup change
+        // again (it isn't one, and re-diagnosing the parsing logic would
+        // be wasted effort every time this happens).
+        logger.warn(
+          { domain, query, responseUrl: flareResult.solution.url },
+          "[Search] Anna's Archive returned a DDoS-Guard anti-bot challenge instead of search results -- FlareSolverr got an HTTP 200 but never got past the challenge. This is not a parsing/markup problem."
+        );
       } else {
-        // Confirmed via a real case (searching "Red Dragon" / "Red Dragon
-        // Thomas Harris" on both domains -- a query that returns 200+ hits
-        // when typed into Anna's Archive's own search box by hand) that
-        // this branch can fire for reasons that have nothing to do with
-        // markup: a Cloudflare interstitial, a rate limit, a "please
-        // sign in" wall, etc. would all look identical to a genuine
-        // redesign from here. Logging a snippet + the final HTTP status
-        // FlareSolverr saw turns the next occurrence into actual evidence
-        // instead of another guess -- deliberately not logging the whole
-        // page (could be large, and isn't needed to tell which of these
-        // it is).
+        // A real case (searching "Red Dragon" / "Red Dragon Thomas
+        // Harris" on both domains -- a query that returns 200+ hits when
+        // typed into Anna's Archive's own search box by hand) showed this
+        // branch can fire for reasons that have nothing to do with
+        // markup -- see isAntiBotChallengePage above for the one cause
+        // that's since been identified and split out. Whatever's left
+        // here is still unexplained, so keep logging a snippet + the
+        // final HTTP status FlareSolverr saw, so the next *new* occurrence
+        // is still real evidence instead of a guess -- deliberately not
+        // logging the whole page (could be large, and isn't needed to
+        // tell which of these it is).
         logger.warn(
           {
             domain,
