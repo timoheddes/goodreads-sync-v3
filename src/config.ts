@@ -1,3 +1,18 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * Read directly from package.json rather than hardcoded/duplicated, so the
+ * version shown in the dashboard (src/web/layout.ts) can never drift from
+ * what's actually published. Resolved relative to this file's own location
+ * (not process.cwd()) so it works the same whether running compiled
+ * (dist/config.js -> ../package.json, copied into the runtime image by the
+ * Dockerfile) or via tsx in dev (src/config.ts -> ../package.json, the repo
+ * root) -- both are exactly one directory below package.json.
+ */
+const packageJsonPath = fileURLToPath(new URL('../package.json', import.meta.url));
+const appVersion: string = JSON.parse(readFileSync(packageJsonPath, 'utf-8')).version;
+
 /**
  * All configuration read from the environment, in one place. Everything
  * that genuinely needs to vary per-deployment (paths, keys, timezone)
@@ -6,6 +21,8 @@
  * dashboard -- see src/db/schema.ts.
  */
 export const config = {
+  version: appVersion,
+
   dbPath: process.env.DB_PATH || '/app/data/books.db',
   port: parseInt(process.env.PORT || '3000', 10),
   timezone: process.env.TZ || 'UTC',

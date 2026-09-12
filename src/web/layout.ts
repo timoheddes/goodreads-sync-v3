@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { escapeHtml } from './html.js';
 
 export interface FlashMessage {
@@ -47,7 +48,7 @@ export function renderLayout({ title, active, body, flash }: LayoutOptions): str
 </head>
 <body hx-boost="true">
 <header>
-  <div class="brand">Goodreads Sync</div>
+  <div class="brand">Goodreads Sync <span class="brand-version">${escapeHtml(config.version)}</span></div>
   <nav>${nav}</nav>
 </header>
 <main>
@@ -68,6 +69,7 @@ const CSS = `
 body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
 header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 12px; }
 .brand { font-weight: 600; font-size: 1.1rem; }
+.brand-version { font-size: 0.75rem; font-weight: 400; color: var(--muted); }
 nav { display: flex; gap: 4px; flex-wrap: wrap; }
 .nav-link { padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted); font-size: 0.9rem; }
 .nav-link:hover { background: var(--accent-light); color: var(--text); }
