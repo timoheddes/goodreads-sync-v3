@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Auto-bumps the patch (third) digit of package.json's version before every
+# push, so each push corresponds to one version -- matches the existing
+# one-image-per-push GitHub Actions build/deploy flow (see PROJECT_CONTEXT.md
+# design decisions). Tracked in .githooks/ (not .git/hooks/, which git never
+# versions) so this survives a fresh clone; `npm run prepare` points git at
+# this directory (see package.json).
+#
+# IMPORTANT caveat: by the time a pre-push hook runs, git has already
+# decided exactly which commit(s) this push will send -- a commit made
+# *inside* the hook cannot retroactively become part of the push already in
+# flight. So this hook bumps + commits, then aborts (exit 1) and asks for a
+# second `git push`, which will include the bump commit. Not fully
+# transparent/automatic, but reliable and never leaves a mismatched
+# in-flight push or a confusing partial-success error.
+
+zero_sha="0000000000000000000000000000000000000000"
+
+has_new_commits=false
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$local_sha" != "$zero_sha" && "$local_sha" != "$remote_sha" ]]; then
+    has_new_commits=true
+  fi
+done
+
+if [[ "$has_new_commits" != true ]]; then
+  # Nothing but a branch delete / already-up-to-date ref -- nothing to bump.
+  exit 0
+fi
+
+last_subject=$(git log -1 --pretty=%s 2>/dev/null || echo "")
+if [[ "$last_subject" == "chore: bump version to "* ]]; then
+  # This push already includes a bump commit -- e.g. the user is re-running
+  # `git push` after this same hook aborted the previous attempt. Don't
+  # bump a second time.
+  exit 0
+fi
+
+current_version=$(node -p "require('./package.json').version")
+IFS='.' read -r major minor patch <<< "$current_version"
+new_version="$major.$minor.$((patch + 1))"
+
+node -e "
+  const fs = require('fs');
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+  pkg.version = '$new_version';
+  fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+"
+
+git add package.json
+git commit -m "chore: bump version to $new_version" --quiet
+
+echo ""
+echo "Bumped package.json to $new_version and committed it locally."
+echo "git can't include a hook-made commit in the push that's already in flight, so this push is being stopped -- run 'git push' again and it will go through with the bump included."
+echo ""
+
+exit 1

@@ -7,7 +7,7 @@ import { buildSearchQueries, isGoodMatch } from './match.js';
 interface FlareSolverrResponse {
   status: string;
   message?: string;
-  solution: { response: string; url: string };
+  solution: { response: string; url: string; status?: number };
 }
 
 async function flareSolverrGet(url: string): Promise<FlareSolverrResponse | null> {
@@ -177,8 +177,26 @@ export async function findBookOnAnna(
       if (pageHasResultsSection(html)) {
         logger.info({ domain, query }, '[Search] No results found');
       } else {
+        // Confirmed via a real case (searching "Red Dragon" / "Red Dragon
+        // Thomas Harris" on both domains -- a query that returns 200+ hits
+        // when typed into Anna's Archive's own search box by hand) that
+        // this branch can fire for reasons that have nothing to do with
+        // markup: a Cloudflare interstitial, a rate limit, a "please
+        // sign in" wall, etc. would all look identical to a genuine
+        // redesign from here. Logging a snippet + the final HTTP status
+        // FlareSolverr saw turns the next occurrence into actual evidence
+        // instead of another guess -- deliberately not logging the whole
+        // page (could be large, and isn't needed to tell which of these
+        // it is).
         logger.warn(
-          { domain, query },
+          {
+            domain,
+            query,
+            responseUrl: flareResult.solution.url,
+            responseStatus: flareResult.solution.status,
+            htmlLength: html.length,
+            htmlSnippet: html.replace(/\s+/g, ' ').trim().slice(0, 500),
+          },
           "[Search] No result rows found at all -- page structure may have changed, or Anna's Archive didn't return a normal results page"
         );
       }

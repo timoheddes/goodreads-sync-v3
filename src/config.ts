@@ -29,7 +29,12 @@ export const config = {
 
   flareSolverrUrl: process.env.FLARE_URL || 'http://localhost:8191/v1',
   annasArchiveApiKey: process.env.AA_API_KEY || '',
-  annasArchiveDomains: ['annas-archive.li', 'annas-archive.gl'],
+  // Used to also try annas-archive.li first. Dropped after a real search
+  // ("Red Dragon" by Thomas Harris) failed identically on both domains in
+  // the same run -- .li never succeeded where .gl didn't, so it was only
+  // ever adding a second FlareSolverr round-trip (each one 15-30s) with no
+  // observed upside. Revisit if .gl itself ever becomes the unreliable one.
+  annasArchiveDomains: ['annas-archive.gl'],
   // Search was epub-only for a while, which silently excluded books that
   // only have a PDF/mobi/azw3 upload on Anna's Archive -- confirmed via a
   // real book search returning just one candidate, whose only upload
