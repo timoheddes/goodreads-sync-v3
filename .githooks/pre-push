@@ -54,7 +54,8 @@ git commit -m "chore: bump version to $new_version" --quiet
 
 echo ""
 echo "Bumped package.json to $new_version and committed it locally."
-echo "git can't include a hook-made commit in the push that's already in flight, so this push is being stopped -- run 'git push' again and it will go through with the bump included."
 echo ""
+
+git push
 
 exit 1
