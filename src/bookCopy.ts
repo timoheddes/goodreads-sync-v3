@@ -68,11 +68,35 @@ export function findExistingCopyForBook(book: BookRow, candidateUsers: UserFolde
   return null;
 }
 
-/** Copies a file found by findExistingCopyForBook into another user's download folder. */
+/**
+ * Copies a file found by findExistingCopyForBook into another user's download
+ * folder.
+ *
+ * Guarded against copying a user's file onto itself: `existing.user` is
+ * whoever findExistingCopyForBook matched, and on a re-sync of an
+ * already-linked, already-downloaded book that can legitimately be the same
+ * person as `targetUser` (see rss.ts, which now filters this out before
+ * calling findExistingCopyForBook, but this guard stays here too as the
+ * single choke point every caller goes through). Without it,
+ * fs.copyFileSync(path, path) either silently no-ops or throws EACCES
+ * depending on that specific file's permissions -- confirmed on a real NAS
+ * for one manually-added file whose ownership didn't match the app's
+ * PUID/PGID, which crashed an entire sync cycle (see Bugs fixed #14).
+ */
 export function copyExistingFileToUser(existing: ExistingCopy, targetUser: UserFolderInfo): void {
   const sourcePath = path.join(existing.user.downloadPath, existing.filename);
+  const destPath = path.join(targetUser.downloadPath, existing.filename);
+
+  if (existing.user.id === targetUser.id) {
+    logger.debug(
+      { user: targetUser.name, filename: existing.filename },
+      '[BookCopy] Skipped copy -- target user already has this file'
+    );
+    return;
+  }
+
   fs.mkdirSync(targetUser.downloadPath, { recursive: true });
-  fs.copyFileSync(sourcePath, path.join(targetUser.downloadPath, existing.filename));
+  fs.copyFileSync(sourcePath, destPath);
   logger.info(
     { fromUser: existing.user.name, toUser: targetUser.name, filename: existing.filename },
     "[BookCopy] Copied existing file from another user's folder instead of re-downloading"

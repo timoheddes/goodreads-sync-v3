@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { findExistingCopyForBook } from './bookCopy.js';
+import { findExistingCopyForBook, copyExistingFileToUser } from './bookCopy.js';
 
 function makeUser(id: number, name: string, downloadPath: string) {
   return {
@@ -81,3 +81,39 @@ test('findExistingCopyForBook does not match an unrelated file when the book alr
 
   assert.equal(findExistingCopyForBook(book, [user]), null);
 });
+
+test('copyExistingFileToUser is a no-op when the source and target user are the same (self-copy guard)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bookcopy-f-'));
+  const filePath = path.join(dir, 'Thomas Harris - Red Dragon.epub');
+  fs.writeFileSync(filePath, 'original contents');
+
+  const user = makeUser(1, 'Alice', dir);
+  const before = fs.statSync(filePath);
+
+  assert.doesNotThrow(() => {
+    copyExistingFileToUser({ user, filename: 'Thomas Harris - Red Dragon.epub' }, user);
+  });
+
+  // File must be untouched -- this is the exact scenario (rss.ts re-syncing
+  // an already-linked, already-downloaded book) that threw EACCES on a real
+  // NAS for a file with mismatched ownership/permissions (Bugs fixed #14).
+  const after = fs.statSync(filePath);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+  assert.equal(fs.readFileSync(filePath, 'utf8'), 'original contents');
+});
+
+test('copyExistingFileToUser still copies normally between two different users', () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'bookcopy-g-a-'));
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'bookcopy-g-b-'));
+  fs.writeFileSync(path.join(dirA, 'Thomas Harris - Red Dragon.epub'), 'original contents');
+
+  const userA = makeUser(1, 'Alice', dirA);
+  const userB = makeUser(2, 'Bob', dirB);
+
+  copyExistingFileToUser({ user: userA, filename: 'Thomas Harris - Red Dragon.epub' }, userB);
+
+  const copiedPath = path.join(dirB, 'Thomas Harris - Red Dragon.epub');
+  assert.ok(fs.existsSync(copiedPath));
+  assert.equal(fs.readFileSync(copiedPath, 'utf8'), 'original contents');
+});
+

@@ -113,13 +113,40 @@ export async function syncUserShelf(user: UserRow): Promise<{ newBooks: number; 
       // queue (getNextEligibleBook only considers pending/not_found
       // rows), so this is the only chance to get this user a copy without
       // a manual intervention -- see findExistingCopyForBook's doc
-      // comment. otherUsers is fetched *before* linkUserBook below so it
-      // can't include this user themselves (who obviously doesn't have
-      // the file yet).
-      const otherUsers = getUsersForBook(book.id);
+      // comment.
+      //
+      // otherUsers must explicitly exclude `user` themselves. The old
+      // assumption here -- that getUsersForBook(book.id) can't yet include
+      // `user` because linkUserBook hasn't run this pass -- only holds the
+      // very first time this book is linked. This branch runs on *every*
+      // sync pass where the book is still on the feed and still marked
+      // `downloaded`, not just the first, so on any later pass `user` is
+      // already linked from before and getUsersForBook returns them too.
+      // Left unfiltered, findExistingCopyForBook can match the user's own
+      // existing file and copyExistingFileToUser would then copy it onto
+      // itself -- confirmed on a real NAS to throw EACCES for one file
+      // (differing ownership/permissions from a manual add) and, because
+      // nothing here caught it, abort this whole shelf sync and skip the
+      // download queue for the entire cycle (see Bugs fixed #14).
+      // copyExistingFileToUser guards against this too, but filtering here
+      // keeps the log from spamming a self-copy "success" for every
+      // already-downloaded book on every unchanged-feed re-sync.
+      const otherUsers = getUsersForBook(book.id).filter((u) => u.id !== user.id);
       const existing = findExistingCopyForBook(book, otherUsers);
       if (existing) {
-        copyExistingFileToUser(existing, user);
+        try {
+          copyExistingFileToUser(existing, user);
+        } catch (err) {
+          // Isolate this one book's copy failure so it can't take down the
+          // rest of this user's shelf sync (or, propagated further, the
+          // whole cycle including the download queue -- see Bugs fixed
+          // #14). The queue's own retry path will pick this book up again
+          // if it's ever reset to pending; for now just log it clearly.
+          logger.error(
+            { err, user: user.name, title: book.title, author: book.author, bookId: book.id },
+            '[RSS] Failed to copy existing file into newly-linked user\'s folder -- skipping, not aborting the sync'
+          );
+        }
       } else {
         logger.warn(
           { user: user.name, title: book.title, author: book.author, bookId: book.id },
